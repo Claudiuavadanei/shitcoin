@@ -279,44 +279,51 @@ class SolanaLiveExecutor:
 
     async def get_jupiter_quote(self, input_mint: str, output_mint: str, amount_lamports: int, slippage_bps: int) -> Optional[Dict[str, Any]]:
         session = await self._get_session()
-        try:
-            url = (
-                f"https://quote-api.jup.ag/v6/quote?"
-                f"inputMint={input_mint}&outputMint={output_mint}&amount={amount_lamports}&"
-                f"slippageBps={slippage_bps}&onlyDirectRoutes=false&maxAccounts=64"
-            )
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=3.0)) as resp:
-                if resp.status == 200:
-                    data = await resp.json(content_type=None)
-                    return data
-                else:
-                    err_text = await resp.text()
-                    logger.error(f"Jupiter quote error ({resp.status}): {err_text[:200]}")
-        except Exception as e:
-            logger.error(f"Jupiter quote request exception: {e}")
+        endpoints = [
+            "https://api.jup.ag/swap/v1/quote",
+            "https://quote-api.jup.ag/v6/quote"
+        ]
+        for ep in endpoints:
+            try:
+                url = (
+                    f"{ep}?"
+                    f"inputMint={input_mint}&outputMint={output_mint}&amount={amount_lamports}&"
+                    f"slippageBps={slippage_bps}&onlyDirectRoutes=false&maxAccounts=64"
+                )
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=4.0)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        if data and data.get("outAmount"):
+                            return data
+            except Exception as e:
+                logger.debug(f"Jupiter quote exception on {ep}: {e}")
         return None
 
     async def build_jupiter_swap_transaction(self, quote_response: Dict[str, Any], user_public_key: str, priority_fee_micro_lamports: int) -> Optional[str]:
         session = await self._get_session()
-        try:
-            url = "https://quote-api.jup.ag/v6/swap"
-            payload = {
-                "quoteResponse": quote_response,
-                "userPublicKey": user_public_key,
-                "wrapAndUnwrapSol": True,
-                "prioritizationFeeLamports": priority_fee_micro_lamports,
-                "dynamicComputeUnitLimit": True
-            }
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=3.0)) as resp:
-                if resp.status == 200:
-                    data = await resp.json(content_type=None)
-                    return data.get("swapTransaction")
-                else:
-                    err_text = await resp.text()
-                    logger.error(f"Jupiter swap build error ({resp.status}): {err_text[:200]}")
-        except Exception as e:
-            logger.error(f"Jupiter swap build request exception: {e}")
+        endpoints = [
+            "https://api.jup.ag/swap/v1/swap",
+            "https://quote-api.jup.ag/v6/swap"
+        ]
+        payload = {
+            "quoteResponse": quote_response,
+            "userPublicKey": user_public_key,
+            "wrapAndUnwrapSol": True,
+            "prioritizationFeeLamports": priority_fee_micro_lamports,
+            "dynamicComputeUnitLimit": True
+        }
+        for ep in endpoints:
+            try:
+                async with session.post(ep, json=payload, timeout=aiohttp.ClientTimeout(total=4.0)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        tx = data.get("swapTransaction")
+                        if tx:
+                            return tx
+            except Exception as e:
+                logger.debug(f"Jupiter swap build exception on {ep}: {e}")
         return None
+
 
     async def sign_and_broadcast_swap(self, swap_tx_b64: str, sk_32: bytes, pk_32: bytes) -> Dict[str, Any]:
         """

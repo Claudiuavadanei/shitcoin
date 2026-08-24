@@ -209,8 +209,10 @@ class MarketScanner:
         session = await self._get_session()
         discovered: List[Dict[str, Any]] = []
 
-        # Feed 1: High-Speed New Pools Feed across Solana, Base, and BSC
-        for chain in config.enabled_chains:
+        # Feed 1: High-Speed New Pools Feed
+        active_chains = ["solana"] if config.trading_mode == "LIVE" else config.enabled_chains
+        for chain in active_chains:
+
             network = "solana" if chain == "solana" else ("bsc" if chain == "bsc" else "base")
             try:
                 url_gecko = f"https://api.geckoterminal.com/api/v2/networks/{network}/new_pools"
