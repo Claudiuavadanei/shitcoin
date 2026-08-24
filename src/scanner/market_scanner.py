@@ -285,9 +285,13 @@ class MarketScanner:
                                 res_list = await asyncio.gather(*tasks, return_exceptions=True)
                                 for res in res_list:
                                     if isinstance(res, dict) and res:
+                                        if config.trading_mode == "LIVE" and res.get("chain") != "solana":
+                                            continue
                                         discovered.append(res)
+
             except Exception as e:
                 logger.debug(f"DexScreener profiles fallback error: {e}")
+
 
         return discovered
 
