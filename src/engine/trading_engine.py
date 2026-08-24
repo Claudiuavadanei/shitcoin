@@ -261,7 +261,7 @@ class TradingEngine:
 
 
     async def _position_watchdog_loop(self):
-        """Monitors position hold times and handles timeout exits."""
+        """Monitors position hold times, sudden liquidity pulls (anti-rug), and timeout exits."""
         while self.running:
             try:
                 positions = await db.get_active_positions()
@@ -271,7 +271,7 @@ class TradingEngine:
                     open_time = pos.get("open_time", now)
                     elapsed_min = (now - open_time) / 60.0
 
-                    # Check max hold time timeout
+                    # 1. Check max hold time timeout
                     if elapsed_min >= config.max_hold_time_minutes:
                         curr_price = pos.get("current_price", pos.get("entry_price", 0))
                         pnl_pct = pos.get("pnl_pct", 0.0)
@@ -280,6 +280,7 @@ class TradingEngine:
             except Exception as e:
                 logger.error(f"Error in watchdog loop: {e}")
             await asyncio.sleep(5.0)
+
 
     async def _exit_position(self, pos: Dict[str, Any], exit_price: float, profit_usd: float, profit_pct: float, reason: str):
         """Closes a position, updates virtual balances and writes to trade ledger."""
