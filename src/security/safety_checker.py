@@ -66,9 +66,10 @@ class SafetyChecker:
         # Query RugCheck API for Solana tokens
         try:
             url = f"https://api.rugcheck.xyz/v1/tokens/{token_address}/report"
-            async with session.get(url) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=2.0)) as resp:
                 if resp.status == 200:
-                    data = await resp.json()
+                    data = await resp.json(content_type=None)
+
                     
                     # Mint authority
                     mint_auth = data.get("token", {}).get("mintAuthority")
@@ -203,9 +204,10 @@ class SafetyChecker:
         # Query GoPlus Security API for EVM
         try:
             url = f"https://api.gopluslabs.io/api/v1/token_security/{chain_id}?contract_addresses={token_address.lower()}"
-            async with session.get(url) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=2.0)) as resp:
                 if resp.status == 200:
-                    res = await resp.json()
+                    res = await resp.json(content_type=None)
+
                     result = res.get("result", {}).get(token_address.lower(), {})
                     if result:
                         is_honeypot = result.get("is_honeypot") == "1"
