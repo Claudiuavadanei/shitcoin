@@ -281,14 +281,14 @@ class MarketScanner:
                     logger.debug(f"GeckoTerminal new pools query exception for {chain}: {e}")
 
 
-        # Fetch detailed pair info for discovered token addresses
-        for addr in list(token_addresses_found)[:15]:
-            try:
-                pair_info = await self.fetch_token_details("", addr)
-                if pair_info:
-                    discovered.append(pair_info)
-            except Exception as e:
-                logger.debug(f"Error fetching pair info for {addr}: {e}")
+        # Fetch detailed pair info for discovered token addresses in parallel
+        addr_list = list(token_addresses_found)[:15]
+        if addr_list:
+            fetch_tasks = [self.fetch_token_details("", addr) for addr in addr_list]
+            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+            for res in results:
+                if isinstance(res, dict) and res:
+                    discovered.append(res)
 
         return discovered
 
@@ -297,7 +297,8 @@ class MarketScanner:
         session = await self._get_session()
         try:
             url = f"https://api.dexscreener.com/latest/dex/tokens/{token_address}"
-            async with session.get(url) as resp:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=3.5)) as resp:
+
                 if resp.status == 200:
                     data = await resp.json()
                     pairs = data.get("pairs", [])
