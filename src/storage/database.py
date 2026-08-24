@@ -52,8 +52,44 @@ class BotDatabase:
                     for key in self.data:
                         if key in loaded:
                             self.data[key] = loaded[key]
+                    
+                    # Sanity filter: Remove any anomalous price glitch trades (> $1000 profit from $15 buy)
+                    cleaned_trades = []
+                    glitch_profit_removed = 0.0
+                    for t in self.data.get("trade_history", []):
+                        p_usd = float(t.get("profit_usd", 0) or 0)
+                        if p_usd > 5000.0 or float(t.get("exit_price", 0) or 0) > float(t.get("entry_price", 1) or 1) * 500:
+                            glitch_profit_removed += p_usd
+                        else:
+                            cleaned_trades.append(t)
+                    
+                    if glitch_profit_removed > 0:
+                        self.data["trade_history"] = cleaned_trades
+                        self.data["paper_balance_usd"] = max(0.0, float(self.data.get("paper_balance_usd", 100.0)) - glitch_profit_removed)
+                        self._recalculate_stats()
             except Exception as e:
                 print(f"[Database] Error loading from disk: {e}")
+
+    def _recalculate_stats(self):
+        trades = self.data.get("trade_history", [])
+        wins = [t for t in trades if float(t.get("profit_usd", 0) or 0) >= 0]
+        losses = [t for t in trades if float(t.get("profit_usd", 0) or 0) < 0]
+        total_p = sum(float(t.get("profit_usd", 0) or 0) for t in trades)
+        best = max([float(t.get("profit_pct", 0) or 0) for t in trades], default=0.0)
+        worst = min([float(t.get("profit_pct", 0) or 0) for t in trades], default=0.0)
+        
+        self.data["stats"] = {
+            "total_trades": len(trades),
+            "winning_trades": len(wins),
+            "losing_trades": len(losses),
+            "total_profit_usd": round(total_p, 2),
+            "total_profit_pct": 0.0,
+            "best_trade_pct": round(best, 2),
+            "worst_trade_pct": round(worst, 2)
+        }
+        self._record_equity_snapshot()
+        self._save_to_disk()
+
 
     def _save_to_disk(self):
         try:

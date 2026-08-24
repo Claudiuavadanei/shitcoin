@@ -353,13 +353,26 @@ class MarketScanner:
                 addresses_str = ",".join(chunk)
                 url = f"https://api.dexscreener.com/latest/dex/tokens/{addresses_str}"
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
-                    if resp.status == 200:
                         data = await resp.json(content_type=None)
                         pairs = data.get("pairs", [])
+                        # Group pairs by baseToken address and pick only the HIGHEST liquidity pool
+                        token_best_pairs: Dict[str, Dict[str, Any]] = {}
                         for pair in pairs:
                             base_addr = pair.get("baseToken", {}).get("address")
-                            price_usd = float(pair.get("priceUsd", 0) or 0)
-                            if base_addr and price_usd > 0:
+                            if not base_addr:
+                                continue
+                            liq_usd = float(pair.get("liquidity", {}).get("usd", 0) or 0)
+                            # Reject fake pools with 0 or negligible liquidity
+                            if liq_usd < 200.0 and len(pairs) > 1:
+                                continue
+                            
+                            curr_best = token_best_pairs.get(base_addr)
+                            if not curr_best or liq_usd > float(curr_best.get("liquidity", {}).get("usd", 0) or 0):
+                                token_best_pairs[base_addr] = pair
+
+                        for base_addr, best_p in token_best_pairs.items():
+                            price_usd = float(best_p.get("priceUsd", 0) or 0)
+                            if price_usd > 0:
                                 price_map[base_addr] = price_usd
                                 price_map[base_addr.lower()] = price_usd
                                 missing_addresses.discard(base_addr)
@@ -368,6 +381,7 @@ class MarketScanner:
                                         missing_addresses.discard(orig)
             except Exception as e:
                 logger.debug(f"DexScreener batch price error: {e}")
+
 
         # Feed 2: GeckoTerminal Redundant Fallback for any unmapped tokens
         if missing_addresses:
