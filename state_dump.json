@@ -1,0 +1,6 @@
+{
+  "error": "'BotDatabase' object has no attribute '_json_serial'",
+  "trace": "Traceback (most recent call last):\n  File \"/app/src/api/routes.py\", line 147, in get_state\n    clean_payload = json.loads(json.dumps(payload, default=db._json_serial))\n                                                           ^^^^^^^^^^^^^^^\nAttributeError: 'BotDatabase' object has no attribute '_json_serial'\n",
+  "config": {},
+  "state": {}
+}

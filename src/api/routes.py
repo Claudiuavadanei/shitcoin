@@ -144,7 +144,7 @@ async def get_state():
             },
             "state": raw_state
         }
-        clean_payload = json.loads(json.dumps(payload, default=db._json_serial))
+        clean_payload = json.loads(json.dumps(payload, default=str))
         return JSONResponse(status_code=200, content=clean_payload)
     except Exception as e:
         import traceback
