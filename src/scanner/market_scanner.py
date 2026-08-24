@@ -205,92 +205,92 @@ class MarketScanner:
             await asyncio.sleep(2.5)
 
     async def _fetch_latest_tokens_multisource(self) -> List[Dict[str, Any]]:
-        """Queries multiple redundant feeds with automatic rotation."""
+        """High-speed multi-chain discovery engine querying GeckoTerminal and DexScreener."""
         session = await self._get_session()
-        discovered = []
-        token_addresses_found = set()
+        discovered: List[Dict[str, Any]] = []
 
-        # Feed 1: DexScreener Latest Token Profiles
-        try:
-            url_profiles = "https://api.dexscreener.com/token-profiles/latest/v1"
-            async with session.get(url_profiles) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if isinstance(data, list):
-                        for item in data[:25]:
-                            chain_id = item.get("chainId", "").lower()
-                            if chain_id in config.enabled_chains:
-                                token_addr = item.get("tokenAddress")
-                                if token_addr and token_addr not in self.seen_tokens and token_addr not in token_addresses_found:
-                                    token_addresses_found.add(token_addr)
-        except Exception as e:
-            logger.debug(f"DexScreener profiles query exception: {e}")
+        # Feed 1: High-Speed New Pools Feed across Solana, Base, and BSC
+        for chain in config.enabled_chains:
+            network = "solana" if chain == "solana" else ("bsc" if chain == "bsc" else "base")
+            try:
+                url_gecko = f"https://api.geckoterminal.com/api/v2/networks/{network}/new_pools"
+                async with session.get(url_gecko, timeout=aiohttp.ClientTimeout(total=3.5)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        pools = data.get("data", [])
+                        for pool in pools[:12]:
+                            attr = pool.get("attributes", {})
+                            base_token_id = pool.get("relationships", {}).get("base_token", {}).get("data", {}).get("id", "")
+                            token_addr = base_token_id.split("_")[-1] if "_" in base_token_id else ""
+                            if not token_addr or token_addr in self.seen_tokens:
+                                continue
+                            
+                            pair_addr = attr.get("address", "")
+                            name_raw = attr.get("name", "Token / SOL")
+                            symbol = name_raw.split(" / ")[0] if " / " in name_raw else name_raw
+                            price_usd = float(attr.get("base_token_price_usd", 0) or 0)
+                            liquidity_usd = float(attr.get("reserve_in_usd", 0) or 0)
+                            vol_dict = attr.get("volume_usd", {})
+                            volume_24h = float(vol_dict.get("h24", vol_dict.get("h1", 0)) or 0)
+                            dex_id = pool.get("relationships", {}).get("dex", {}).get("data", {}).get("id", "dex")
+                            
+                            txns = attr.get("transactions", {}).get("h1", {})
+                            buys = int(txns.get("buys", 0) or 0)
+                            sells = int(txns.get("sells", 0) or 0)
+                            
+                            pool_info = {
+                                "token_address": token_addr,
+                                "name": symbol,
+                                "symbol": symbol,
+                                "chain": chain,
+                                "dex_id": dex_id,
+                                "pair_address": pair_addr,
+                                "price_usd": price_usd,
+                                "price_native": float(attr.get("base_token_price_native_currency", 0) or 0),
+                                "liquidity_usd": liquidity_usd,
+                                "volume_24h": volume_24h,
+                                "fdv": float(attr.get("fdv_usd", 0) or 0),
+                                "price_change_5m": float(attr.get("price_change_percentage", {}).get("m5", 0) or 0),
+                                "price_change_1h": float(attr.get("price_change_percentage", {}).get("h1", 0) or 0),
+                                "price_change_24h": float(attr.get("price_change_percentage", {}).get("h24", 0) or 0),
+                                "created_at_ms": int(time.time() * 1000),
+                                "discovered_at": time.time(),
+                                "url": f"https://dexscreener.com/{chain}/{pair_addr}" if pair_addr else f"https://dexscreener.com/{chain}/{token_addr}",
+                                "pair_data": {
+                                    "chainId": chain,
+                                    "dexId": dex_id,
+                                    "pairAddress": pair_addr,
+                                    "baseToken": {"address": token_addr, "name": symbol, "symbol": symbol},
+                                    "priceUsd": str(price_usd),
+                                    "txns": {"h1": {"buys": buys, "sells": sells}, "m5": {"buys": buys, "sells": sells}},
+                                    "volume": {"h24": volume_24h, "h1": volume_24h},
+                                    "liquidity": {"usd": liquidity_usd}
+                                }
+                            }
+                            discovered.append(pool_info)
+            except Exception as e:
+                logger.debug(f"GeckoTerminal pools error for {chain}: {e}")
 
-        # Feed 2: DexScreener Latest Boosts
-        try:
-            url_boosts = "https://api.dexscreener.com/token-boosts/latest/v1"
-            async with session.get(url_boosts) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if isinstance(data, list):
-                        for item in data[:20]:
-                            chain_id = item.get("chainId", "").lower()
-                            if chain_id in config.enabled_chains:
-                                token_addr = item.get("tokenAddress")
-                                if token_addr and token_addr not in self.seen_tokens and token_addr not in token_addresses_found:
-                                    token_addresses_found.add(token_addr)
-        except Exception as e:
-            logger.debug(f"DexScreener boosts query exception: {e}")
-
-        # Feed 3: DexScreener Rotating Live Search for Newly Created Pairs
-        search_terms = ["solana", "pump", "raydium", "meme", "base", "wbnb", "pepe", "trump", "doge", "moon", "ai"]
-        term = search_terms[self.total_scans % len(search_terms)]
-        try:
-            url_search = f"https://api.dexscreener.com/latest/dex/search?q={term}"
-            async with session.get(url_search) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    pairs = data.get("pairs", [])
-                    if isinstance(pairs, list):
-                        for p in pairs[:15]:
-                            chain_id = p.get("chainId", "").lower()
-                            if chain_id in config.enabled_chains:
-                                token_addr = p.get("baseToken", {}).get("address")
-                                if token_addr and token_addr not in self.seen_tokens and token_addr not in token_addresses_found:
-                                    token_addresses_found.add(token_addr)
-        except Exception as e:
-            logger.debug(f"DexScreener search error for {term}: {e}")
-
-        # Feed 4: GeckoTerminal New Pools Fallback for Solana/BSC/Base
-        if len(token_addresses_found) < 6:
-            for chain in config.enabled_chains:
-                network = "solana" if chain == "solana" else ("bsc" if chain == "bsc" else "base")
-                try:
-                    url_gecko = f"https://api.geckoterminal.com/api/v2/networks/{network}/new_pools"
-                    async with session.get(url_gecko) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            pools = data.get("data", [])
-                            for pool in pools[:10]:
-                                base_token_id = pool.get("relationships", {}).get("base_token", {}).get("data", {}).get("id", "")
-                                if "_" in base_token_id:
-                                    addr = base_token_id.split("_")[-1]
-                                    if addr and addr not in self.seen_tokens:
-                                        token_addresses_found.add(addr)
-                except Exception as e:
-                    logger.debug(f"GeckoTerminal new pools query exception for {chain}: {e}")
-
-
-        # Fetch detailed pair info for discovered token addresses in parallel
-        addr_list = list(token_addresses_found)[:15]
-        if addr_list:
-            fetch_tasks = [self.fetch_token_details("", addr) for addr in addr_list]
-            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
-            for res in results:
-                if isinstance(res, dict) and res:
-                    discovered.append(res)
+        # Feed 2: DexScreener Profiles Fallback
+        if len(discovered) < 5:
+            try:
+                url_profiles = "https://api.dexscreener.com/token-profiles/latest/v1"
+                async with session.get(url_profiles, timeout=aiohttp.ClientTimeout(total=3.0)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json(content_type=None)
+                        if isinstance(data, list):
+                            addrs = [item.get("tokenAddress") for item in data[:8] if item.get("tokenAddress") and item.get("tokenAddress") not in self.seen_tokens]
+                            if addrs:
+                                tasks = [self.fetch_token_details("", a) for a in addrs]
+                                res_list = await asyncio.gather(*tasks, return_exceptions=True)
+                                for res in res_list:
+                                    if isinstance(res, dict) and res:
+                                        discovered.append(res)
+            except Exception as e:
+                logger.debug(f"DexScreener profiles fallback error: {e}")
 
         return discovered
+
 
     async def fetch_token_details(self, chain: str, token_address: str) -> Optional[Dict[str, Any]]:
         """Fetches full pair metadata, liquidity, volume, and current price from DexScreener."""
