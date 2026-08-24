@@ -178,6 +178,11 @@ class SolanaLiveExecutor:
             "https://ny.mainnet.block-engine.jito.wtf",
             "https://tokyo.mainnet.block-engine.jito.wtf"
         ]
+        # Rolling P80 Priority Fee & Jito Tip Cache
+        self.recent_p80_fees: List[int] = [50000]
+        self.last_p80_fee: int = 50000
+        self.last_jito_tip_sol: float = config.jito_tip_sol
+        self.last_jito_fetch_time: float = 0.0
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self.session is None or self.session.closed:
@@ -193,6 +198,37 @@ class SolanaLiveExecutor:
 
     def get_random_jito_tip_account(self) -> str:
         return random.choice(JITO_TIP_ACCOUNTS)
+
+    async def get_dynamic_jito_tip(self) -> float:
+        """
+        Fetches live Jito tip floor percentiles from Jito Block Engine and calculates optimal tip in SOL.
+        Includes aggressive timeout and cached fallback.
+        """
+        now = time.time()
+        # Cache for 10 seconds to avoid spamming the endpoint
+        if now - self.last_jito_fetch_time < 10.0 and self.last_jito_tip_sol > 0:
+            return self.last_jito_tip_sol
+
+        session = await self._get_session()
+        try:
+            async with session.get(config.jito_tip_floor_url, timeout=aiohttp.ClientTimeout(total=1.5)) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    if isinstance(data, list) and data:
+                        latest = data[0]
+                        p_key = f"landed_tips_{config.jito_tip_percentile}th_percentile"
+                        tip_sol = float(latest.get(p_key, latest.get("landed_tips_50th_percentile", 0.0001)) or 0.0001)
+                        
+                        # Apply safety bounds
+                        clamped_tip = max(config.min_jito_tip_sol, min(config.max_jito_tip_sol, tip_sol))
+                        self.last_jito_tip_sol = round(clamped_tip, 6)
+                        self.last_jito_fetch_time = now
+                        logger.debug(f"⚡ Live Dynamic Jito Tip Floor ({config.jito_tip_percentile}th pct): {self.last_jito_tip_sol} SOL")
+                        return self.last_jito_tip_sol
+        except Exception as e:
+            logger.debug(f"Failed fetching dynamic Jito tip floor: {e}")
+
+        return self.last_jito_tip_sol
 
     async def get_live_wallet_balance(self) -> Dict[str, Any]:
         """Queries on-chain balance and public address for configured Solana wallet."""
@@ -245,23 +281,27 @@ class SolanaLiveExecutor:
             "sol_price_usd": round(sol_price, 2)
         }
 
-    async def get_dynamic_priority_fee(self) -> int:
+    async def get_dynamic_priority_fee(self, account_addresses: Optional[List[str]] = None) -> int:
         """
-        Queries recent prioritization fees on Solana and calculates the 80th percentile.
+        Queries recent prioritization fees on Solana (specifically for target pool/token account if provided)
+        and calculates the 80th percentile (P80) with aggressive low-latency timeout and rolling cache fallback.
         Returns micro-lamports per compute unit.
         """
         if not config.dynamic_priority_fee_enabled:
-            return 50000
+            return self.last_p80_fee
 
         session = await self._get_session()
+        params_accounts = [account_addresses] if account_addresses else [[]]
+        timeout_sec = max(0.2, config.priority_fee_timeout_ms / 1000.0)
+
         try:
             payload = {
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "getRecentPrioritizationFees",
-                "params": [[]]
+                "params": params_accounts
             }
-            async with session.post(config.solana_rpc_url, json=payload, timeout=aiohttp.ClientTimeout(total=2.0)) as resp:
+            async with session.post(config.solana_rpc_url, json=payload, timeout=aiohttp.ClientTimeout(total=timeout_sec)) as resp:
                 if resp.status == 200:
                     data = await resp.json(content_type=None)
                     fees = data.get("result", [])
@@ -271,11 +311,26 @@ class SolanaLiveExecutor:
                             vals.sort()
                             idx = int(len(vals) * 0.80)
                             calc_fee = vals[min(idx, len(vals) - 1)]
-                            return max(25000, min(config.max_priority_fee_micro_lamports, calc_fee))
+                            clamped_fee = max(config.min_priority_fee_micro_lamports, min(config.max_priority_fee_micro_lamports, calc_fee))
+                            
+                            # Update rolling cache
+                            self.last_p80_fee = clamped_fee
+                            self.recent_p80_fees.append(clamped_fee)
+                            if len(self.recent_p80_fees) > 10:
+                                self.recent_p80_fees = self.recent_p80_fees[-10:]
+                            
+                            target_str = f" for pool {account_addresses[0][:8]}..." if account_addresses else " (Global)"
+                            logger.debug(f"⚡ Calculated dynamic P80 priority fee{target_str}: {clamped_fee:,} micro-lamports/CU")
+                            return clamped_fee
         except Exception as e:
-            logger.debug(f"Failed to fetch dynamic priority fee: {e}")
+            logger.debug(f"Priority fee RPC query timed out ({timeout_sec*1000:.0f}ms) or errored: {e}")
 
-        return 50000
+        # Fallback: Average of recent successful P80 fees
+        if self.recent_p80_fees:
+            avg_fee = int(sum(self.recent_p80_fees) / len(self.recent_p80_fees))
+            return max(config.min_priority_fee_micro_lamports, min(config.max_priority_fee_micro_lamports, avg_fee))
+
+        return self.last_p80_fee
 
     async def get_jupiter_quote(self, input_mint: str, output_mint: str, amount_lamports: int, slippage_bps: int) -> Optional[Dict[str, Any]]:
         session = await self._get_session()
@@ -420,8 +475,10 @@ class SolanaLiveExecutor:
         
         logger.info(f"⚡ Executing LIVE SNIPE for {token_address} with {buy_amount_sol} SOL from wallet {pub_b58}")
 
-        # 1. Fetch Dynamic Priority Fee
-        priority_fee = await self.get_dynamic_priority_fee()
+        # 1. Fetch Dynamic Pool-Specific Priority Fee & Live Jito Tip
+        priority_fee = await self.get_dynamic_priority_fee([token_address])
+        jito_tip = await self.get_dynamic_jito_tip()
+        logger.info(f"⚡ Dynamic Gas War Shield: Fee = {priority_fee:,} micro-lamports/CU | Jito Tip = {jito_tip} SOL")
 
         # 2. Get Jupiter V6 Optimal Swap Quote
         quote = await self.get_jupiter_quote(SOL_MINT, token_address, amount_lamports, slippage_bps)
@@ -454,6 +511,7 @@ class SolanaLiveExecutor:
             "signature": tx_sig,
             "solscan_url": f"https://solscan.io/tx/{tx_sig}",
             "priority_fee_micro_lamports": priority_fee,
+            "jito_tip_sol": jito_tip,
             "jito_mev_active": config.jito_mev_enabled,
             "slippage_bps": slippage_bps
         }
@@ -508,7 +566,7 @@ class SolanaLiveExecutor:
         slippage_bps = int(config.max_slippage_percent * 100)
         logger.info(f"⚡ Executing LIVE SELL for {token_address} (Raw Amount: {raw_amount}) from wallet {pub_b58}")
 
-        priority_fee = await self.get_dynamic_priority_fee()
+        priority_fee = await self.get_dynamic_priority_fee([token_address])
         quote = await self.get_jupiter_quote(token_address, SOL_MINT, raw_amount, slippage_bps)
         if not quote:
             return {"success": False, "error": "Could not get Jupiter sell quote"}

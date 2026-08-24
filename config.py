@@ -72,14 +72,20 @@ class BotConfig(BaseModel):
     solana_ws_url: str = Field(default_factory=lambda: os.getenv("SOLANA_WS_URL", "wss://api.mainnet-beta.solana.com"))
     solana_private_key: str = Field(default_factory=lambda: os.getenv("SOLANA_PRIVATE_KEY", ""))
     
-    # Jito MEV Bundle Settings
+    # Jito MEV Bundle Settings (Dynamic Tip Floor Support)
     jito_mev_enabled: bool = Field(default_factory=lambda: os.getenv("JITO_MEV_ENABLED", "true").lower() == "true")
     jito_tip_sol: float = Field(default_factory=lambda: float(os.getenv("JITO_TIP_SOL", "0.001")))
+    min_jito_tip_sol: float = Field(default_factory=lambda: float(os.getenv("MIN_JITO_TIP_SOL", "0.0001")))
+    max_jito_tip_sol: float = Field(default_factory=lambda: float(os.getenv("MAX_JITO_TIP_SOL", "0.005")))
+    jito_tip_percentile: int = Field(default_factory=lambda: int(os.getenv("JITO_TIP_PERCENTILE", "50")))
+    jito_tip_floor_url: str = Field(default_factory=lambda: os.getenv("JITO_TIP_FLOOR_URL", "https://bundles.jito.wtf/api/v1/bundles/tip_floor"))
     jito_block_engine_url: str = Field(default_factory=lambda: os.getenv("JITO_BLOCK_ENGINE_URL", "https://mainnet.block-engine.jito.wtf"))
     
     # Dynamic Priority Fees & Slippage
     dynamic_priority_fee_enabled: bool = Field(default_factory=lambda: os.getenv("DYNAMIC_PRIORITY_FEE_ENABLED", "true").lower() == "true")
-    max_priority_fee_micro_lamports: int = Field(default_factory=lambda: int(os.getenv("MAX_PRIORITY_FEE_MICRO_LAMPORTS", "200000")))
+    priority_fee_timeout_ms: int = Field(default_factory=lambda: int(os.getenv("PRIORITY_FEE_TIMEOUT_MS", "350")))
+    max_priority_fee_micro_lamports: int = Field(default_factory=lambda: int(os.getenv("MAX_PRIORITY_FEE_MICRO_LAMPORTS", "250000")))
+    min_priority_fee_micro_lamports: int = Field(default_factory=lambda: int(os.getenv("MIN_PRIORITY_FEE_MICRO_LAMPORTS", "25000")))
     max_slippage_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_SLIPPAGE_PERCENT", "3.5")))
     
     # Token-2022 Anti-Rug Scanner & Network Resiliency

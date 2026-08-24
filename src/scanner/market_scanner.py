@@ -378,6 +378,9 @@ class MarketScanner:
                             "url": f"https://dexscreener.com/solana/{token_address}",
                             "pair_data": {"chainId": "solana"}
                         }
+        except Exception as e:
+            logger.debug(f"GeckoTerminal fallback error for {token_address}: {e}")
+
         # Source 3: Direct Jupiter Routing Fallback (For ultra-fresh Raydium/Pump tokens)
         try:
             url_jup = f"https://api.jup.ag/swap/v1/quote?inputMint=So11111111111111111111111111111111111111112&outputMint={token_address}&amount=100000000&slippageBps=500&restrictIntermediateTokens=true"
