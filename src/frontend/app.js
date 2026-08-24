@@ -280,8 +280,11 @@ function renderNavbar() {
     navTradingMode.textContent = c.trading_mode === "LIVE" ? "LIVE TRADING" : "PAPER TRADING";
     navTradingMode.className = `chip-value mode-badge ${c.trading_mode === "LIVE" ? "live" : "paper"}`;
 
-    navSolBalance.textContent = `${(s.paper_balance_sol || 0).toFixed(2)} SOL`;
-    navUsdBalance.textContent = `$${(s.paper_balance_usd || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const solBal = (c.trading_mode === "LIVE" && s.live_balance_sol !== undefined) ? s.live_balance_sol : (s.paper_balance_sol || 0);
+    const usdBal = (c.trading_mode === "LIVE" && s.live_balance_usd !== undefined) ? s.live_balance_usd : (s.paper_balance_usd || 0);
+
+    navSolBalance.textContent = `${Number(solBal).toFixed(2)} SOL`;
+    navUsdBalance.textContent = `$${Number(usdBal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const stats = s.stats || {};
     const totalProfit = stats.total_profit_usd || 0;
@@ -289,6 +292,7 @@ function renderNavbar() {
     navNetPnl.textContent = `${sign}$${totalProfit.toFixed(2)}`;
     navNetPnl.style.color = totalProfit >= 0 ? "var(--neon-green)" : "var(--neon-red)";
 }
+
 
 function renderKpis() {
     const s = botState.state;
