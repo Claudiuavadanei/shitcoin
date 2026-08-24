@@ -138,9 +138,10 @@ async def get_state():
                 "max_buy_tax_percent": config.max_buy_tax_percent,
                 "max_sell_tax_percent": config.max_sell_tax_percent,
                 "min_safety_score": config.min_safety_score,
-                "enabled_chains": config.enabled_chains
+                "enabled_chains": ["solana"] if config.trading_mode == "LIVE" else config.enabled_chains
             },
             "state": raw_state
+
         }
         clean_json = json.loads(json.dumps(payload, default=str))
         return JSONResponse(content=clean_json)
