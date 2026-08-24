@@ -166,6 +166,19 @@ class TradingEngine:
                     logger.info(msg)
                     return {"success": False, "error": msg}
 
+                # Wallet Balance & Reserve Protection (Guarantees SOL for important transactions)
+                try:
+                    from src.engine.solana_live_executor import get_solana_keypair
+                    sk_32, pk_32, pub_b58 = get_solana_keypair(config.solana_private_key)
+                    live_sol_bal = await solana_executor.get_wallet_balance_sol(pub_b58)
+                    if (live_sol_bal - buy_sol) < config.min_wallet_sol_reserve:
+                        msg = f"🛡️ Minimum SOL Reserve Protected: Wallet has {live_sol_bal:.3f} SOL. Cannot buy {buy_sol} SOL to keep minimum {config.min_wallet_sol_reserve} SOL safe for your important transactions."
+                        logger.warning(msg)
+                        await db.add_log("WARN", msg)
+                        return {"success": False, "error": msg}
+                except Exception as e:
+                    logger.debug(f"Reserve check note: {e}")
+
                 live_res = await solana_executor.execute_live_snipe(token_address, buy_sol)
                 if not live_res.get("success"):
                     err_msg = live_res.get("error", "Live execution failed")

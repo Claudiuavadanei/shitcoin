@@ -33,6 +33,7 @@ class BotConfig(BaseModel):
     # Position Sizing (Calibrated for strict capital preservation)
     buy_amount_sol: float = Field(default_factory=lambda: float(os.getenv("BUY_AMOUNT_SOL", "0.03")))
     buy_amount_usd: float = Field(default_factory=lambda: float(os.getenv("BUY_AMOUNT_USD", "3.0")))
+    min_wallet_sol_reserve: float = Field(default_factory=lambda: float(os.getenv("MIN_WALLET_SOL_RESERVE", "0.5")))
     max_open_positions: int = Field(default_factory=lambda: int(os.getenv("MAX_OPEN_POSITIONS", "10")))
     max_slippage_percent: float = 3.0
 
