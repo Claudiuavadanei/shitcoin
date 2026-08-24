@@ -135,15 +135,16 @@ class SolanaLiveExecutor:
         except Exception as e:
             logger.debug(f"Failed to fetch live balance: {e}")
 
-        # Fetch SOL price
+        # Fetch SOL price from primary SOL/USDC pool
         try:
-            url = "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112"
+            url = "https://api.dexscreener.com/latest/dex/pairs/solana/8sLbNZoA1cfnvMJLPfp98ZLAnFSYCFApfJKMbiXNLwxj"
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=2.5)) as p_resp:
                 if p_resp.status == 200:
                     p_data = await p_resp.json(content_type=None)
-                    pairs = p_data.get("pairs", [])
-                    if pairs:
-                        sol_price = float(pairs[0].get("priceUsd", 180.0) or 180.0)
+                    pair = p_data.get("pair", {})
+                    p_usd = float(pair.get("priceUsd", 0) or 0)
+                    if p_usd > 10.0:
+                        sol_price = p_usd
         except Exception:
             pass
 
@@ -153,6 +154,7 @@ class SolanaLiveExecutor:
             "usd_balance": round(sol_bal * sol_price, 2),
             "sol_price_usd": round(sol_price, 2)
         }
+
 
     async def get_dynamic_priority_fee(self) -> int:
 

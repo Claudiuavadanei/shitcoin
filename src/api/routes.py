@@ -26,9 +26,11 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
 
-    def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
         self.active_connections.add(websocket)
         logger.info(f"WebSocket client connected. Active clients: {len(self.active_connections)}")
+
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.discard(websocket)
