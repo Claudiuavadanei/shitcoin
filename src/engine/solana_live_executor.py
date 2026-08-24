@@ -576,14 +576,28 @@ class SolanaLiveExecutor:
         if raw_amount <= 0:
             return {"success": False, "error": f"No on-chain tokens found for {token_address}"}
 
-        slippage_bps = int(config.max_slippage_percent * 100)
-        logger.info(f"⚡ Executing LIVE SELL for {token_address} (Raw Amount: {raw_amount}) from wallet {pub_b58}")
+        # Adaptive Exit Slippage: Try standard slippage first, then expand if market is dumping fast
+        slippage_tiers = [
+            int(config.max_slippage_percent * 100),
+            max(500, int(config.max_slippage_percent * 150)),
+            1000, # 10%
+            1500  # 15%
+        ]
+        
+        quote = None
+        used_slippage = slippage_tiers[0]
+        for s_bps in slippage_tiers:
+            quote = await self.get_jupiter_quote(token_address, SOL_MINT, raw_amount, s_bps)
+            if quote:
+                used_slippage = s_bps
+                break
+
+        if not quote:
+            return {"success": False, "error": f"Could not get Jupiter sell quote for {token_address} even with {slippage_tiers[-1]/100:.1f}% slippage"}
+
+        logger.info(f"⚡ Executing LIVE SELL for {token_address} (Raw Amount: {raw_amount}) with {used_slippage/100:.1f}% slippage from wallet {pub_b58}")
 
         priority_fee = await self.get_dynamic_priority_fee([token_address])
-        quote = await self.get_jupiter_quote(token_address, SOL_MINT, raw_amount, slippage_bps)
-        if not quote:
-            return {"success": False, "error": "Could not get Jupiter sell quote"}
-
         swap_tx_b64 = await self.build_jupiter_swap_transaction(quote, pub_b58, priority_fee)
         if not swap_tx_b64:
             return {"success": False, "error": "Could not build Jupiter sell swap transaction"}

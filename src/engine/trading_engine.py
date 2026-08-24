@@ -385,19 +385,28 @@ class TradingEngine:
         }
 
         # Live exit on-chain if in LIVE mode
+        live_sell_sig = ""
         if config.trading_mode == "LIVE" and pos.get("chain") == "solana":
             try:
-                await solana_executor.execute_live_sell(token_address, pos.get("token_amount", 0.0))
+                sell_res = await solana_executor.execute_live_sell(token_address, pos.get("token_amount", 0.0))
+                if sell_res.get("success"):
+                    live_sell_sig = sell_res.get("signature", "")
+                    exit_data["signature"] = live_sell_sig
+                    exit_data["solscan_url"] = f"https://solscan.io/tx/{live_sell_sig}"
+                    logger.info(f"✅ ON-CHAIN SELL SUCCESS for {pos.get('symbol')}: https://solscan.io/tx/{live_sell_sig}")
+                else:
+                    logger.warning(f"⚠️ Live sell returned: {sell_res.get('error')}")
             except Exception as e:
                 logger.error(f"Live exit exception for {token_address}: {e}")
 
         closed_trade = await db.close_position(token_address, exit_data)
 
-        
         is_win = profit_usd >= 0
         log_type = "SUCCESS" if is_win else "ERROR"
         sign = "+" if profit_usd >= 0 else ""
         log_msg = f"💰 CLOSED {pos.get('symbol')} | Reason: {reason} | Exit: ${exit_price:.8f} | PnL: {sign}${profit_usd:.2f} ({sign}{profit_pct:.2f}%)"
+        if live_sell_sig:
+            log_msg += f" | 🔗 Solscan: https://solscan.io/tx/{live_sell_sig}"
         
         await db.add_log(log_type, log_msg, exit_data)
         logger.info(log_msg)
