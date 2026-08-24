@@ -30,34 +30,34 @@ class BotConfig(BaseModel):
     auto_buy_enabled: bool = Field(default_factory=lambda: os.getenv("AUTO_BUY_ENABLED", "true").lower() == "true")
     scanner_active: bool = True
     
-    # Position Sizing
-    buy_amount_sol: float = Field(default_factory=lambda: float(os.getenv("BUY_AMOUNT_SOL", "0.1")))
-    buy_amount_usd: float = Field(default_factory=lambda: float(os.getenv("BUY_AMOUNT_USD", "15.0")))
-    max_open_positions: int = Field(default_factory=lambda: int(os.getenv("MAX_OPEN_POSITIONS", "30")))
+    # Position Sizing (Calibrated for strict capital preservation)
+    buy_amount_sol: float = Field(default_factory=lambda: float(os.getenv("BUY_AMOUNT_SOL", "0.03")))
+    buy_amount_usd: float = Field(default_factory=lambda: float(os.getenv("BUY_AMOUNT_USD", "3.0")))
+    max_open_positions: int = Field(default_factory=lambda: int(os.getenv("MAX_OPEN_POSITIONS", "10")))
     max_slippage_percent: float = 3.0
 
 
     # Profit & Risk Strategy (Targets optimized for 70%+ Win Rate)
     take_profit_percent: float = Field(default_factory=lambda: float(os.getenv("TAKE_PROFIT_PERCENT", "18.0")))
     break_even_enabled: bool = Field(default_factory=lambda: os.getenv("BREAK_EVEN_ENABLED", "true").lower() == "true")
-    break_even_trigger_percent: float = Field(default_factory=lambda: float(os.getenv("BREAK_EVEN_TRIGGER_PERCENT", "6.0")))
+    break_even_trigger_percent: float = Field(default_factory=lambda: float(os.getenv("BREAK_EVEN_TRIGGER_PERCENT", "4.0")))
     break_even_offset_percent: float = Field(default_factory=lambda: float(os.getenv("BREAK_EVEN_OFFSET_PERCENT", "1.0")))
     trailing_stop_enabled: bool = Field(default_factory=lambda: os.getenv("TRAILING_STOP_ENABLED", "true").lower() == "true")
-    trailing_stop_offset_percent: float = Field(default_factory=lambda: float(os.getenv("TRAILING_STOP_OFFSET_PERCENT", "5.0")))
-    stop_loss_percent: float = Field(default_factory=lambda: float(os.getenv("STOP_LOSS_PERCENT", "12.0")))
-    max_hold_time_minutes: int = Field(default_factory=lambda: int(os.getenv("MAX_HOLD_TIME_MINUTES", "60")))
+    trailing_stop_offset_percent: float = Field(default_factory=lambda: float(os.getenv("TRAILING_STOP_OFFSET_PERCENT", "4.0")))
+    stop_loss_percent: float = Field(default_factory=lambda: float(os.getenv("STOP_LOSS_PERCENT", "8.0")))
+    max_hold_time_minutes: int = Field(default_factory=lambda: int(os.getenv("MAX_HOLD_TIME_MINUTES", "45")))
 
-    # Safety & Anti-Rug Thresholds (Calibrated for active Solana trading)
-    min_liquidity_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_LIQUIDITY_USD", "3500.0")))
-    min_volume_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_VOLUME_USD", "500.0")))
-    max_dev_holding_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_DEV_HOLDING_PERCENT", "20.0")))
+    # Safety & Anti-Rug Thresholds (Calibrated for safe Solana trading)
+    min_liquidity_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_LIQUIDITY_USD", "8000.0")))
+    min_volume_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_VOLUME_USD", "1500.0")))
+    max_dev_holding_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_DEV_HOLDING_PERCENT", "15.0")))
     max_buy_tax_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_BUY_TAX_PERCENT", "5.0")))
     max_sell_tax_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_SELL_TAX_PERCENT", "5.0")))
-    min_safety_score: int = Field(default_factory=lambda: int(os.getenv("MIN_SAFETY_SCORE", "60")))
+    min_safety_score: int = Field(default_factory=lambda: int(os.getenv("MIN_SAFETY_SCORE", "80")))
     
     # AI Market Intelligence & Smart Assistant Settings
     ai_filtering_enabled: bool = Field(default_factory=lambda: os.getenv("AI_FILTERING_ENABLED", "true").lower() == "true")
-    min_ai_confidence: int = Field(default_factory=lambda: int(os.getenv("MIN_AI_CONFIDENCE", "65")))
+    min_ai_confidence: int = Field(default_factory=lambda: int(os.getenv("MIN_AI_CONFIDENCE", "80")))
     ai_smart_exit_enabled: bool = Field(default_factory=lambda: os.getenv("AI_SMART_EXIT_ENABLED", "true").lower() == "true")
     gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
 
