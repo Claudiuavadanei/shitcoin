@@ -458,6 +458,32 @@ class SolanaLiveExecutor:
             "slippage_bps": slippage_bps
         }
 
+    async def get_token_raw_balance(self, user_public_key: str, token_mint: str) -> int:
+        """Fetches exact on-chain raw balance for a token account."""
+        session = await self._get_session()
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTokenAccountsByOwner",
+            "params": [
+                user_public_key,
+                {"mint": token_mint},
+                {"encoding": "jsonParsed"}
+            ]
+        }
+        try:
+            async with session.post(config.solana_rpc_url, json=payload, timeout=aiohttp.ClientTimeout(total=4.0)) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    accounts = data.get("result", {}).get("value", [])
+                    if accounts:
+                        info = accounts[0].get("account", {}).get("data", {}).get("parsed", {}).get("info", {}).get("tokenAmount", {})
+                        raw_amount = int(info.get("amount", "0") or 0)
+                        return raw_amount
+        except Exception as e:
+            logger.debug(f"Failed to fetch raw token balance for {token_mint}: {e}")
+        return 0
+
     async def execute_live_sell(self, token_address: str, token_amount: float) -> Dict[str, Any]:
         """
         Executes an on-chain sniper sell order to exit into SOL with MEV sandwich protection.
@@ -470,11 +496,20 @@ class SolanaLiveExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+        # 1. Fetch exact raw token amount with decimals from user's on-chain token account
+        raw_amount = await self.get_token_raw_balance(pub_b58, token_address)
+        if raw_amount <= 0:
+            # Fallback estimation for 6-decimal pump tokens
+            raw_amount = int(token_amount * 1_000_000)
+
+        if raw_amount <= 0:
+            return {"success": False, "error": f"No on-chain tokens found for {token_address}"}
+
         slippage_bps = int(config.max_slippage_percent * 100)
-        logger.info(f"⚡ Executing LIVE SELL for {token_address} (Amount: {token_amount:,.2f}) to wallet {pub_b58}")
+        logger.info(f"⚡ Executing LIVE SELL for {token_address} (Raw Amount: {raw_amount}) from wallet {pub_b58}")
 
         priority_fee = await self.get_dynamic_priority_fee()
-        quote = await self.get_jupiter_quote(token_address, SOL_MINT, int(token_amount), slippage_bps)
+        quote = await self.get_jupiter_quote(token_address, SOL_MINT, raw_amount, slippage_bps)
         if not quote:
             return {"success": False, "error": "Could not get Jupiter sell quote"}
 
