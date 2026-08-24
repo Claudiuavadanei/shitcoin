@@ -21,6 +21,7 @@ class TradingEngine:
     def __init__(self):
         self.lock = asyncio.Lock()
         self.running = False
+        self.exited_tokens: Set[str] = set()
         
         # Connect scanner callbacks
         scanner.register_token_callback(self.on_token_discovered)
@@ -45,6 +46,10 @@ class TradingEngine:
     async def on_token_discovered(self, token_data: Dict[str, Any]):
         """Triggered automatically whenever a new token is scanned and audited."""
         if not config.auto_buy_enabled or not config.scanner_active or not self.running:
+            return
+
+        token_address = token_data.get("token_address")
+        if not token_address or token_address in self.exited_tokens:
             return
 
         safety = token_data.get("safety", {})
@@ -424,6 +429,7 @@ class TradingEngine:
                 logger.error(f"Live exit exception for {token_address}: {e}")
 
         closed_trade = await db.close_position(token_address, exit_data)
+        self.exited_tokens.add(token_address)
 
         is_win = profit_usd >= 0
         log_type = "SUCCESS" if is_win else "ERROR"
