@@ -614,19 +614,34 @@ function renderTradeHistory() {
         const sign = isWin ? "+" : "";
         const timeStr = t.closed_at ? new Date(t.closed_at * 1000).toLocaleTimeString() : "--:--";
 
+        let reasonBadge = `<span class="text-muted" style="font-size: 11px;">${escapeHtml(t.exit_reason || 'MANUAL')}</span>`;
+        const reason = t.exit_reason || '';
+        if (reason.includes('RUG_PULL') || reason.includes('LP Drained')) {
+            reasonBadge = `<span class="badge-status-rug" style="background: rgba(255, 0, 85, 0.2); color: #ff0055; border: 1px solid rgba(255, 0, 85, 0.6); font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-block;">💀 RUG-PULL (LP $0)</span>`;
+        } else if (reason.includes('TAKE_PROFIT')) {
+            reasonBadge = `<span class="badge-status-tp" style="background: rgba(0, 255, 163, 0.15); color: #00ffa3; border: 1px solid rgba(0, 255, 163, 0.5); font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-block;">🎯 TAKE PROFIT</span>`;
+        } else if (reason.includes('BREAK_EVEN')) {
+            reasonBadge = `<span class="badge-status-be" style="background: rgba(0, 240, 255, 0.15); color: #00f0ff; border: 1px solid rgba(0, 240, 255, 0.5); font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-block;">🔒 BREAK-EVEN</span>`;
+        } else if (reason.includes('STOP_LOSS')) {
+            reasonBadge = `<span class="badge-status-sl" style="background: rgba(255, 77, 77, 0.15); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.5); font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-block;">🛑 STOP LOSS</span>`;
+        } else if (reason.includes('TRAILING_STOP')) {
+            reasonBadge = `<span class="badge-status-trailing" style="background: rgba(255, 184, 0, 0.15); color: #ffb800; border: 1px solid rgba(255, 184, 0, 0.5); font-weight: 700; font-size: 10px; padding: 2px 6px; border-radius: 4px; display: inline-block;">🛡️ TRAILING STOP</span>`;
+        }
+
         return `
             <tr>
                 <td class="text-muted">${timeStr}</td>
                 <td><strong>${escapeHtml(t.symbol || 'TOKEN')}</strong> <span class="text-muted" style="font-size: 10px;">(${escapeHtml(t.chain || 'SOL')})</span></td>
                 <td>$${formatPrice(t.entry_price)}</td>
                 <td>$${formatPrice(t.exit_price)}</td>
-                <td class="${isWin ? 'text-green' : 'text-red'}">${sign}$${(t.profit_usd || 0).toFixed(2)}</td>
-                <td class="${isWin ? 'text-green' : 'text-red'}">${sign}${(t.profit_pct || 0).toFixed(2)}%</td>
-                <td><span class="text-muted" style="font-size: 11px;">${escapeHtml(t.exit_reason || 'MANUAL')}</span></td>
+                <td class="${isWin ? 'text-green' : 'text-red'}" style="font-weight: 700;">${sign}$${(t.profit_usd || 0).toFixed(2)}</td>
+                <td class="${isWin ? 'text-green' : 'text-red'}" style="font-weight: 700;">${sign}${(t.profit_pct || 0).toFixed(2)}%</td>
+                <td>${reasonBadge}</td>
             </tr>
         `;
     }).join("");
 }
+
 
 function renderLogs() {
     const logs = botState.state.activity_logs || [];

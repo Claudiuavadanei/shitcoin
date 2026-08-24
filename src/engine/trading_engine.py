@@ -199,6 +199,12 @@ class TradingEngine:
         stop_loss_target_price = pos.get("stop_loss_target_price", entry_price * (1.0 - (config.stop_loss_percent / 100.0)))
         be_activated = pos.get("break_even_activated", False)
 
+        # 0. RUG-PULL & CATASTROPHIC DUMP DETECTION (Realistic Market Simulation)
+        if current_price < (entry_price * 0.15) or current_price <= 1e-11:
+            rug_reason = "RUG_PULL / DUMPED 💀"
+            await self._exit_position(pos, current_price, -invested_usd, -100.0, rug_reason)
+            return
+
         # 1. AUTO BREAK-EVEN LOCK (Turns potential losses into guaranteed risk-free trades)
         if config.break_even_enabled and not be_activated:
             if pnl_pct >= config.break_even_trigger_percent:
@@ -268,10 +274,23 @@ class TradingEngine:
                 now = time.time()
                 for pos in positions:
                     token_addr = pos["token_address"]
+                    chain = pos.get("chain", "solana")
                     open_time = pos.get("open_time", now)
                     elapsed_min = (now - open_time) / 60.0
+                    invested_usd = pos.get("invested_usd", 0.0)
 
-                    # 1. Check max hold time timeout
+                    # 1. Sudden Liquidity Drain / Rug-Pull Check
+                    try:
+                        token_details = await scanner.fetch_token_details(chain, token_addr)
+                        if token_details:
+                            curr_liq = token_details.get("liquidity_usd", 999999.0)
+                            if curr_liq < 300.0:  # Dev pulled LP!
+                                await self._exit_position(pos, 0.0, -invested_usd, -100.0, "RUG_PULL (LP Drained to $0) 💀")
+                                continue
+                    except Exception:
+                        pass
+
+                    # 2. Check max hold time timeout
                     if elapsed_min >= config.max_hold_time_minutes:
                         curr_price = pos.get("current_price", pos.get("entry_price", 0))
                         pnl_pct = pos.get("pnl_pct", 0.0)
@@ -280,6 +299,7 @@ class TradingEngine:
             except Exception as e:
                 logger.error(f"Error in watchdog loop: {e}")
             await asyncio.sleep(5.0)
+
 
 
     async def _exit_position(self, pos: Dict[str, Any], exit_price: float, profit_usd: float, profit_pct: float, reason: str):
