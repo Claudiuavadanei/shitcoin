@@ -297,18 +297,17 @@ class MarketScanner:
 
 
     async def fetch_token_details(self, chain: str, token_address: str) -> Optional[Dict[str, Any]]:
-        """Fetches full pair metadata, liquidity, volume, and current price from DexScreener."""
+        """Fetches full pair metadata, liquidity, volume, and current price with multi-source fallback."""
         session = await self._get_session()
+        # Source 1: DexScreener Token Pairs
         try:
             url = f"https://api.dexscreener.com/latest/dex/tokens/{token_address}"
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=3.5)) as resp:
-
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=6.5)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     pairs = data.get("pairs", [])
                     if pairs:
                         best_pair = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
-                        
                         base_token = best_pair.get("baseToken", {})
                         price_usd = float(best_pair.get("priceUsd", 0) or 0)
                         price_native = float(best_pair.get("priceNative", 0) or 0)
@@ -338,8 +337,42 @@ class MarketScanner:
                             "pair_data": best_pair
                         }
         except Exception as e:
-            logger.debug(f"Failed fetching details for token {token_address}: {e}")
+            logger.debug(f"DexScreener detail query exception for {token_address}: {e}")
+
+        # Source 2: GeckoTerminal Fallback
+        try:
+            url_gecko = f"https://api.geckoterminal.com/api/v2/networks/solana/tokens/{token_address}"
+            async with session.get(url_gecko, timeout=aiohttp.ClientTimeout(total=5.0)) as g_resp:
+                if g_resp.status == 200:
+                    g_data = await g_resp.json(content_type=None)
+                    attr = g_data.get("data", {}).get("attributes", {})
+                    if attr:
+                        price_usd = float(attr.get("price_usd", 0) or 0)
+                        return {
+                            "token_address": token_address,
+                            "name": attr.get("name", "Unknown Token"),
+                            "symbol": attr.get("symbol", "TOKEN"),
+                            "chain": "solana",
+                            "dex_id": "raydium",
+                            "pair_address": "",
+                            "price_usd": price_usd,
+                            "price_native": 0.0,
+                            "liquidity_usd": float(attr.get("total_reserve_in_usd", 10000.0) or 10000.0),
+                            "volume_24h": float(attr.get("volume_usd", {}).get("h24", 0) or 0),
+                            "fdv": float(attr.get("fdv_usd", 0) or 0),
+                            "price_change_5m": 0.0,
+                            "price_change_1h": 0.0,
+                            "price_change_24h": 0.0,
+                            "created_at_ms": int(time.time() * 1000),
+                            "discovered_at": time.time(),
+                            "url": f"https://dexscreener.com/solana/{token_address}",
+                            "pair_data": {"chainId": "solana"}
+                        }
+        except Exception as e:
+            logger.debug(f"GeckoTerminal fallback error for {token_address}: {e}")
+
         return None
+
 
     async def fetch_token_prices(self, token_addresses: List[str]) -> Dict[str, float]:
         """Batch queries token prices from DexScreener with GeckoTerminal redundant fallback."""
