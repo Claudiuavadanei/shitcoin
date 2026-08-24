@@ -127,7 +127,12 @@ class TradingEngine:
 
             # Live on-chain execution with Jito MEV + Jupiter V6 router
             live_meta = {}
-            if config.trading_mode == "LIVE" and chain == "solana":
+            if config.trading_mode == "LIVE":
+                if chain != "solana":
+                    msg = f"Skipping {token_address} on {chain.upper()}: LIVE mode is configured strictly for your Solana wallet."
+                    logger.info(msg)
+                    return {"success": False, "error": msg}
+
                 live_res = await solana_executor.execute_live_snipe(token_address, buy_sol)
                 if not live_res.get("success"):
                     err_msg = live_res.get("error", "Live execution failed")
@@ -135,6 +140,7 @@ class TradingEngine:
                     await db.add_log("ERROR", f"❌ Live Snipe Failed: {err_msg}")
                     return {"success": False, "error": err_msg}
                 live_meta = live_res
+
 
             # Calculate token quantity
             # Apply simulated slippage (e.g. 0.5% - 1.5%)

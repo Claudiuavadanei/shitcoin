@@ -61,8 +61,9 @@ class BotConfig(BaseModel):
     gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
 
 
-    # Chains to scan (e.g., solana, bsc, base, ethereum)
-    enabled_chains: list[str] = ["solana", "bsc", "base"]
+    # Chains to scan (Only solana when live trading with Solana wallet)
+    enabled_chains: list[str] = Field(default_factory=lambda: [c.strip() for c in os.getenv("ENABLED_CHAINS", "solana").split(",") if c.strip()])
+
 
     # Solana Live Execution & MEV Infrastructure
     solana_rpc_url: str = Field(default_factory=lambda: os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com"))
