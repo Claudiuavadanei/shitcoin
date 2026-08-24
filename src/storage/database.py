@@ -91,16 +91,29 @@ class BotDatabase:
         self._save_to_disk()
 
 
+def sanitize_json_val(obj):
+    import math
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    elif isinstance(obj, dict):
+        return {k: sanitize_json_val(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_json_val(v) for v in obj]
+    return obj
+
     def _save_to_disk(self):
         try:
             with open(DB_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2)
+                json.dump(sanitize_json_val(self.data), f, indent=2)
         except Exception as e:
             print(f"[Database] Error saving to disk: {e}")
 
     async def get_state(self) -> Dict[str, Any]:
         async with self.lock:
-            return dict(self.data)
+            return sanitize_json_val(dict(self.data))
+
 
     async def get_active_positions(self) -> List[Dict[str, Any]]:
         async with self.lock:
