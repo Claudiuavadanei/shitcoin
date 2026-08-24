@@ -336,33 +336,61 @@ class MarketScanner:
         return None
 
     async def fetch_token_prices(self, token_addresses: List[str]) -> Dict[str, float]:
-        """Batch queries token prices."""
+        """Batch queries token prices from DexScreener with GeckoTerminal redundant fallback."""
         if not token_addresses:
             return {}
             
         session = await self._get_session()
         price_map: Dict[str, float] = {}
+        missing_addresses = set(token_addresses)
         
+        # Feed 1: DexScreener Batch Price Endpoint
         chunks = [token_addresses[i:i + 30] for i in range(0, len(token_addresses), 30)]
         for chunk in chunks:
             try:
                 addresses_str = ",".join(chunk)
                 url = f"https://api.dexscreener.com/latest/dex/tokens/{addresses_str}"
-                async with session.get(url) as resp:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
                     if resp.status == 200:
-                        data = await resp.json()
+                        data = await resp.json(content_type=None)
                         pairs = data.get("pairs", [])
                         for pair in pairs:
                             base_addr = pair.get("baseToken", {}).get("address")
                             price_usd = float(pair.get("priceUsd", 0) or 0)
                             if base_addr and price_usd > 0:
-                                if base_addr not in price_map or float(pair.get("liquidity", {}).get("usd", 0) or 0) > 1000:
-                                    price_map[base_addr] = price_usd
-                                    price_map[base_addr.lower()] = price_usd
+                                price_map[base_addr] = price_usd
+                                price_map[base_addr.lower()] = price_usd
+                                missing_addresses.discard(base_addr)
+                                for orig in chunk:
+                                    if orig.lower() == base_addr.lower():
+                                        missing_addresses.discard(orig)
             except Exception as e:
-                logger.debug(f"Error fetching batch prices: {e}")
+                logger.debug(f"DexScreener batch price error: {e}")
+
+        # Feed 2: GeckoTerminal Redundant Fallback for any unmapped tokens
+        if missing_addresses:
+            for net in ["solana", "base", "bsc"]:
+                try:
+                    addrs_str = ",".join(list(missing_addresses)[:30])
+                    gecko_url = f"https://api.geckoterminal.com/api/v2/simple/networks/{net}/token_price/{addrs_str}"
+                    async with session.get(gecko_url, timeout=aiohttp.ClientTimeout(total=4)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json(content_type=None)
+                            prices = data.get("data", {}).get("attributes", {}).get("token_prices", {})
+                            for addr_k, price_v in prices.items():
+                                p_float = float(price_v or 0)
+                                if p_float > 0:
+                                    price_map[addr_k] = p_float
+                                    price_map[addr_k.lower()] = p_float
+                                    for orig in list(missing_addresses):
+                                        if orig.lower() == addr_k.lower():
+                                            price_map[orig] = p_float
+                                            missing_addresses.discard(orig)
+                except Exception as e:
+                    logger.debug(f"GeckoTerminal fallback price error on {net}: {e}")
 
         return price_map
+
 
 
 scanner = MarketScanner()
