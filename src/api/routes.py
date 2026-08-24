@@ -95,36 +95,44 @@ class ResetBalanceRequest(BaseModel):
 @router.get("/state")
 async def get_state():
     """Returns complete state snapshot of the bot, AI settings, and configurations."""
-    state = await db.get_state()
-    return {
-        "config": {
-            "trading_mode": config.trading_mode,
-            "auto_buy_enabled": config.auto_buy_enabled,
-            "scanner_active": config.scanner_active,
-            "ai_filtering_enabled": config.ai_filtering_enabled,
-            "min_ai_confidence": config.min_ai_confidence,
-            "ai_smart_exit_enabled": config.ai_smart_exit_enabled,
-            "break_even_enabled": config.break_even_enabled,
-            "break_even_trigger_percent": config.break_even_trigger_percent,
-            "break_even_offset_percent": config.break_even_offset_percent,
-            "buy_amount_usd": config.buy_amount_usd,
-            "buy_amount_sol": config.buy_amount_sol,
-            "max_open_positions": config.max_open_positions,
-            "take_profit_percent": config.take_profit_percent,
-            "trailing_stop_enabled": config.trailing_stop_enabled,
-            "trailing_stop_offset_percent": config.trailing_stop_offset_percent,
-            "stop_loss_percent": config.stop_loss_percent,
-            "max_hold_time_minutes": config.max_hold_time_minutes,
-            "min_liquidity_usd": config.min_liquidity_usd,
-            "min_volume_usd": config.min_volume_usd,
-            "max_dev_holding_percent": config.max_dev_holding_percent,
-            "max_buy_tax_percent": config.max_buy_tax_percent,
-            "max_sell_tax_percent": config.max_sell_tax_percent,
-            "min_safety_score": config.min_safety_score,
-            "enabled_chains": config.enabled_chains
-        },
-        "state": state
-    }
+    try:
+        state = await db.get_state()
+        if config.trading_mode == "LIVE":
+            state["trading_mode"] = "LIVE"
+            
+        return {
+            "config": {
+                "trading_mode": config.trading_mode,
+                "auto_buy_enabled": config.auto_buy_enabled,
+                "scanner_active": config.scanner_active,
+                "ai_filtering_enabled": config.ai_filtering_enabled,
+                "min_ai_confidence": config.min_ai_confidence,
+                "ai_smart_exit_enabled": config.ai_smart_exit_enabled,
+                "break_even_enabled": config.break_even_enabled,
+                "break_even_trigger_percent": config.break_even_trigger_percent,
+                "break_even_offset_percent": config.break_even_offset_percent,
+                "buy_amount_usd": config.buy_amount_usd,
+                "buy_amount_sol": config.buy_amount_sol,
+                "max_open_positions": config.max_open_positions,
+                "take_profit_percent": config.take_profit_percent,
+                "trailing_stop_enabled": config.trailing_stop_enabled,
+                "trailing_stop_offset_percent": config.trailing_stop_offset_percent,
+                "stop_loss_percent": config.stop_loss_percent,
+                "max_hold_time_minutes": config.max_hold_time_minutes,
+                "min_liquidity_usd": config.min_liquidity_usd,
+                "min_volume_usd": config.min_volume_usd,
+                "max_dev_holding_percent": config.max_dev_holding_percent,
+                "max_buy_tax_percent": config.max_buy_tax_percent,
+                "max_sell_tax_percent": config.max_sell_tax_percent,
+                "min_safety_score": config.min_safety_score,
+                "enabled_chains": config.enabled_chains
+            },
+            "state": state
+        }
+    except Exception as e:
+        logger.error(f"Error in get_state: {e}", exc_info=True)
+        return {"error": str(e), "config": {}, "state": {}}
+
 
 @router.post("/config")
 async def update_config(req: ConfigUpdateRequest):
