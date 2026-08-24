@@ -7,6 +7,7 @@ import json
 import logging
 from typing import Dict, Any, List, Set, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from config import config
 from src.storage.database import db
@@ -25,8 +26,7 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
+    def connect(self, websocket: WebSocket):
         self.active_connections.add(websocket)
         logger.info(f"WebSocket client connected. Active clients: {len(self.active_connections)}")
 
@@ -98,21 +98,20 @@ class ResetBalanceRequest(BaseModel):
 async def get_state():
     """Returns complete state snapshot of the bot, AI settings, and configurations."""
     try:
-        state = await db.get_state()
+        raw_state = await db.get_state()
         if config.trading_mode == "LIVE":
-            state["trading_mode"] = "LIVE"
+            raw_state["trading_mode"] = "LIVE"
             try:
                 live_info = await solana_executor.get_live_wallet_balance()
-                state["paper_balance_sol"] = live_info.get("sol_balance", 1.02)
-                state["paper_balance_usd"] = live_info.get("usd_balance", 183.60)
-                state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
-                state["live_balance_usd"] = live_info.get("usd_balance", 183.60)
-                state["wallet_address"] = live_info.get("address", "")
+                raw_state["paper_balance_sol"] = live_info.get("sol_balance", 1.02)
+                raw_state["paper_balance_usd"] = live_info.get("usd_balance", 183.60)
+                raw_state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
+                raw_state["live_balance_usd"] = live_info.get("usd_balance", 183.60)
+                raw_state["wallet_address"] = live_info.get("address", "")
             except Exception as e:
                 logger.debug(f"Error fetching live wallet balance: {e}")
             
-        return {
-
+        payload = {
             "config": {
                 "trading_mode": config.trading_mode,
                 "auto_buy_enabled": config.auto_buy_enabled,
@@ -139,11 +138,15 @@ async def get_state():
                 "min_safety_score": config.min_safety_score,
                 "enabled_chains": config.enabled_chains
             },
-            "state": state
+            "state": raw_state
         }
+        clean_json = json.loads(json.dumps(payload, default=str))
+        return JSONResponse(content=clean_json)
     except Exception as e:
-        logger.error(f"Error in get_state: {e}", exc_info=True)
-        return {"error": str(e), "config": {}, "state": {}}
+        import traceback
+        err_trace = traceback.format_exc()
+        logger.error(f"Error in get_state: {err_trace}")
+        return JSONResponse(status_code=200, content={"error": str(e), "trace": err_trace, "config": {}, "state": {}})
 
 
 @router.post("/config")
