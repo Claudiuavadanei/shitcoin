@@ -421,7 +421,17 @@
                         <label>Max Dev / Top Holder Share (%)</label>
                         <input id="cfgMaxDevHoldingPct" type="number" step="1" max="100" class="cyber-input full-width">
                     </div>
+
+                    <div class="setting-group" style="grid-column: 1 / -1;">
+                        <label>🔑 Solana Wallet Private Key or 12-Word Recovery Phrase (Live Mode On-Chain Signing)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input id="cfgSolanaPrivateKey" type="password" placeholder="Base58 Private Key sau 12 cuvinte recovery phrase..." class="cyber-input full-width">
+                            <button type="button" id="btnToggleKeyVisibility" class="btn-secondary" style="padding: 0 12px;">👁️</button>
+                        </div>
+                        <small style="color: #64748b; font-size: 11px; margin-top: 4px; display: block;">Cheia este folosită exclusiv pentru semnarea tranzacțiilor Jito MEV + Jupiter V1 pe blockchain-ul Solana.</small>
+                    </div>
                 </div>
+
 
                 <div class="reset-balance-box">
                     <div class="reset-title">Reset Virtual Balance & Clear All Stats (PnL = $0.00)</div>

@@ -143,6 +143,21 @@ function setupEventListeners() {
     btnSaveSettings.addEventListener("click", saveSettings);
     btnResetBalance.addEventListener("click", handleResetBalance);
 
+    const btnToggleKeyVisibility = document.getElementById("btnToggleKeyVisibility");
+    if (btnToggleKeyVisibility) {
+        btnToggleKeyVisibility.addEventListener("click", () => {
+            const input = document.getElementById("cfgSolanaPrivateKey");
+            if (input.type === "password") {
+                input.type = "text";
+                btnToggleKeyVisibility.textContent = "🔒";
+            } else {
+                input.type = "password";
+                btnToggleKeyVisibility.textContent = "👁️";
+            }
+        });
+    }
+
+
     // Inspector Modal
     btnCloseInspector.addEventListener("click", () => {
         inspectorModal.classList.remove("show");
@@ -935,9 +950,15 @@ function openSettingsModal() {
     document.getElementById("cfgTakeProfitPct").value = c.take_profit_percent || 18.0;
     document.getElementById("cfgTrailingStopOffsetPct").value = c.trailing_stop_offset_percent || 5.0;
     document.getElementById("cfgStopLossPct").value = c.stop_loss_percent || 12.0;
-    document.getElementById("cfgMinSafetyScore").value = c.min_safety_score || 80;
-    document.getElementById("cfgMinLiquidityUsd").value = c.min_liquidity_usd || 8000;
-    document.getElementById("cfgMaxDevHoldingPct").value = c.max_dev_holding_percent || 15.0;
+    document.getElementById("cfgMinSafetyScore").value = c.min_safety_score || 60;
+    document.getElementById("cfgMinLiquidityUsd").value = c.min_liquidity_usd || 3500;
+    document.getElementById("cfgMaxDevHoldingPct").value = c.max_dev_holding_percent || 20.0;
+
+    const keyInput = document.getElementById("cfgSolanaPrivateKey");
+    if (keyInput) {
+        keyInput.value = "";
+        keyInput.placeholder = c.has_solana_private_key ? "•••••••• (Cheia Solana este activă și securizată)" : "Base58 Private Key sau 12 cuvinte recovery phrase...";
+    }
 
     settingsModal.classList.add("show");
 }
@@ -947,31 +968,37 @@ function closeSettingsModal() {
 }
 
 async function saveSettings() {
+    const keyVal = document.getElementById("cfgSolanaPrivateKey") ? document.getElementById("cfgSolanaPrivateKey").value.trim() : "";
     const updated = {
         trading_mode: document.getElementById("cfgTradingMode").value,
         auto_buy_enabled: botState.config.auto_buy_enabled,
         scanner_active: botState.config.scanner_active,
         ai_filtering_enabled: document.getElementById("cfgAiFiltering").value === "true",
-        min_ai_confidence: parseInt(document.getElementById("cfgMinAiConfidence").value) || 80,
+        min_ai_confidence: parseInt(document.getElementById("cfgMinAiConfidence").value) || 65,
         ai_smart_exit_enabled: document.getElementById("cfgAiSmartExit").value === "true",
         break_even_enabled: document.getElementById("cfgBreakEvenEnabled").value === "true",
         break_even_trigger_percent: parseFloat(document.getElementById("cfgBreakEvenTriggerPct").value) || 6.0,
         break_even_offset_percent: 1.0,
-        buy_amount_usd: parseFloat(document.getElementById("cfgBuyAmountUsd").value) || 15.0,
-        buy_amount_sol: 0.1,
+        buy_amount_usd: parseFloat(document.getElementById("cfgBuyAmountUsd").value) || 8.0,
+        buy_amount_sol: 0.08,
         max_open_positions: parseInt(document.getElementById("cfgMaxOpenPositions").value) || 30,
         take_profit_percent: parseFloat(document.getElementById("cfgTakeProfitPct").value) || 18.0,
         trailing_stop_enabled: true,
         trailing_stop_offset_percent: parseFloat(document.getElementById("cfgTrailingStopOffsetPct").value) || 5.0,
         stop_loss_percent: parseFloat(document.getElementById("cfgStopLossPct").value) || 12.0,
         max_hold_time_minutes: botState.config.max_hold_time_minutes || 60,
-        min_liquidity_usd: parseFloat(document.getElementById("cfgMinLiquidityUsd").value) || 8000.0,
-        min_volume_usd: botState.config.min_volume_usd || 1000.0,
-        max_dev_holding_percent: parseFloat(document.getElementById("cfgMaxDevHoldingPct").value) || 15.0,
+        min_liquidity_usd: parseFloat(document.getElementById("cfgMinLiquidityUsd").value) || 3500.0,
+        min_volume_usd: botState.config.min_volume_usd || 500.0,
+        max_dev_holding_percent: parseFloat(document.getElementById("cfgMaxDevHoldingPct").value) || 20.0,
         max_buy_tax_percent: botState.config.max_buy_tax_percent || 5.0,
         max_sell_tax_percent: botState.config.max_sell_tax_percent || 5.0,
-        min_safety_score: parseInt(document.getElementById("cfgMinSafetyScore").value) || 80
+        min_safety_score: parseInt(document.getElementById("cfgMinSafetyScore").value) || 60
     };
+
+    if (keyVal) {
+        updated.solana_private_key = keyVal;
+    }
+
 
     try {
         const res = await fetch("/api/config", {

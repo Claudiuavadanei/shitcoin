@@ -68,33 +68,34 @@ class AnalyzeTokenRequest(BaseModel):
     chain: str = "solana"
 
 class ConfigUpdateRequest(BaseModel):
-    trading_mode: str = "PAPER"
+    trading_mode: str = "LIVE"
     auto_buy_enabled: bool = True
     scanner_active: bool = True
     ai_filtering_enabled: bool = True
-    min_ai_confidence: int = 80
+    min_ai_confidence: int = 65
     ai_smart_exit_enabled: bool = True
     break_even_enabled: bool = True
     break_even_trigger_percent: float = 6.0
     break_even_offset_percent: float = 1.0
-    buy_amount_usd: float = 15.0
-    buy_amount_sol: float = 0.1
+    buy_amount_usd: float = 8.0
+    buy_amount_sol: float = 0.08
     max_open_positions: int = 30
     take_profit_percent: float = 18.0
     trailing_stop_enabled: bool = True
     trailing_stop_offset_percent: float = 5.0
     stop_loss_percent: float = 12.0
     max_hold_time_minutes: int = 60
-    min_liquidity_usd: float = 8000.0
-    min_volume_usd: float = 1000.0
-    max_dev_holding_percent: float = 15.0
+    min_liquidity_usd: float = 3500.0
+    min_volume_usd: float = 500.0
+    max_dev_holding_percent: float = 20.0
     max_buy_tax_percent: float = 5.0
     max_sell_tax_percent: float = 5.0
-    min_safety_score: int = 80
+    min_safety_score: int = 60
+    solana_private_key: Optional[str] = None
 
 class ResetBalanceRequest(BaseModel):
-    sol: float = 10.0
-    usd: float = 1500.0
+    sol: float
+    usd: float
 
 @router.get("/state")
 async def get_state():
@@ -110,7 +111,6 @@ async def get_state():
                 raw_state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
                 raw_state["live_balance_usd"] = live_info.get("usd_balance", 97.95)
                 raw_state["wallet_address"] = live_info.get("address", "")
-
             except Exception as e:
                 logger.debug(f"Error fetching live wallet balance: {e}")
             
@@ -139,13 +139,13 @@ async def get_state():
                 "max_buy_tax_percent": config.max_buy_tax_percent,
                 "max_sell_tax_percent": config.max_sell_tax_percent,
                 "min_safety_score": config.min_safety_score,
-                "enabled_chains": ["solana"] if config.trading_mode == "LIVE" else config.enabled_chains
+                "has_solana_private_key": bool(config.solana_private_key),
+                "solana_wallet_address": raw_state.get("wallet_address", "")
             },
             "state": raw_state
-
         }
-        clean_json = json.loads(json.dumps(payload, default=str))
-        return JSONResponse(content=clean_json)
+        clean_payload = json.loads(json.dumps(payload, default=db._json_serial))
+        return JSONResponse(status_code=200, content=clean_payload)
     except Exception as e:
         import traceback
         err_trace = traceback.format_exc()
@@ -180,7 +180,15 @@ async def update_config(req: ConfigUpdateRequest):
     config.max_sell_tax_percent = req.max_sell_tax_percent
     config.min_safety_score = req.min_safety_score
 
-    await db.add_log("INFO", f"Bot configuration updated. TP: +{config.take_profit_percent}% | SL: -{config.stop_loss_percent}% | BE: {'ON' if config.break_even_enabled else 'OFF'} at +{config.break_even_trigger_percent}%")
+    if req.solana_private_key is not None and req.solana_private_key.strip():
+        config.solana_private_key = req.solana_private_key.strip()
+        try:
+            _, _, pub_b58 = get_solana_keypair(config.solana_private_key)
+            await db.add_log("SUCCESS", f"🔑 Live Solana Private Key loaded! Wallet Address: {pub_b58}")
+        except Exception as e:
+            await db.add_log("ERROR", f"❌ Error loading Solana key: {e}")
+
+    await db.add_log("INFO", f"Bot configuration updated. Mode: {config.trading_mode} | Buy: {config.buy_amount_sol} SOL | Min Liq: ${config.min_liquidity_usd}")
     await ws_manager.broadcast({"type": "CONFIG_UPDATED", "config": req.model_dump()})
     return {"success": True, "message": "Config updated"}
 
