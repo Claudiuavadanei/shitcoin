@@ -72,7 +72,13 @@ class BotDatabase:
 
     async def get_position(self, token_address: str) -> Optional[Dict[str, Any]]:
         async with self.lock:
-            return self.data["positions"].get(token_address)
+            if token_address in self.data["positions"]:
+                return self.data["positions"][token_address]
+            addr_lower = token_address.lower()
+            for k, v in self.data["positions"].items():
+                if k.lower() == addr_lower:
+                    return v
+            return None
 
     async def add_position(self, position: Dict[str, Any]):
         async with self.lock:
@@ -83,21 +89,37 @@ class BotDatabase:
             cost_sol = position.get("invested_sol", 0.0)
             self.data["paper_balance_usd"] = max(0.0, self.data["paper_balance_usd"] - cost_usd)
             self.data["paper_balance_sol"] = max(0.0, self.data["paper_balance_sol"] - cost_sol)
+            self._record_equity_snapshot()
             self._save_to_disk()
 
     async def update_position(self, token_address: str, updates: Dict[str, Any]):
         async with self.lock:
-            if token_address in self.data["positions"]:
-                self.data["positions"][token_address].update(updates)
+            target_key = token_address
+            if target_key not in self.data["positions"]:
+                addr_lower = token_address.lower()
+                for k in self.data["positions"].keys():
+                    if k.lower() == addr_lower:
+                        target_key = k
+                        break
+            if target_key in self.data["positions"]:
+                self.data["positions"][target_key].update(updates)
                 self._save_to_disk()
 
     async def close_position(self, token_address: str, exit_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         async with self.lock:
-            if token_address not in self.data["positions"]:
+            target_key = token_address
+            if target_key not in self.data["positions"]:
+                addr_lower = token_address.lower()
+                for k in self.data["positions"].keys():
+                    if k.lower() == addr_lower:
+                        target_key = k
+                        break
+            if target_key not in self.data["positions"]:
                 return None
             
-            pos = self.data["positions"].pop(token_address)
+            pos = self.data["positions"].pop(target_key)
             closed_trade = {**pos, **exit_data, "closed_at": time.time()}
+
             
             # Update virtual balance with return
             returned_usd = exit_data.get("returned_usd", 0.0)

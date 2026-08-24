@@ -358,9 +358,11 @@ class MarketScanner:
                             if base_addr and price_usd > 0:
                                 if base_addr not in price_map or float(pair.get("liquidity", {}).get("usd", 0) or 0) > 1000:
                                     price_map[base_addr] = price_usd
+                                    price_map[base_addr.lower()] = price_usd
             except Exception as e:
                 logger.debug(f"Error fetching batch prices: {e}")
 
         return price_map
+
 
 scanner = MarketScanner()
