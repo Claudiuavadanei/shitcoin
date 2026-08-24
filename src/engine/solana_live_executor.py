@@ -288,15 +288,18 @@ class SolanaLiveExecutor:
                 url = (
                     f"{ep}?"
                     f"inputMint={input_mint}&outputMint={output_mint}&amount={amount_lamports}&"
-                    f"slippageBps={slippage_bps}&onlyDirectRoutes=false&maxAccounts=64"
+                    f"slippageBps={slippage_bps}&onlyDirectRoutes=false&maxAccounts=64&restrictIntermediateTokens=true"
                 )
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=4.0)) as resp:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
                     if resp.status == 200:
                         data = await resp.json(content_type=None)
                         if data and data.get("outAmount"):
                             return data
+                    else:
+                        text = await resp.text()
+                        logger.error(f"Jupiter {ep} returned {resp.status}: {text}")
             except Exception as e:
-                logger.debug(f"Jupiter quote exception on {ep}: {e}")
+                logger.error(f"Jupiter quote exception on {ep}: {e}")
         return None
 
     async def build_jupiter_swap_transaction(self, quote_response: Dict[str, Any], user_public_key: str, priority_fee_micro_lamports: int) -> Optional[str]:
