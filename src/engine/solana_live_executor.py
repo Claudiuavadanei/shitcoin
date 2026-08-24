@@ -486,8 +486,21 @@ class SolanaLiveExecutor:
             return {"success": False, "error": f"No liquid Jupiter route found for {token_address} with max {config.max_slippage_percent}% slippage"}
 
         out_amount = quote.get("outAmount", "0")
-        price_impact = quote.get("priceImpactPct", "0")
-        logger.info(f"🎯 Jupiter Quote: In {buy_amount_sol} SOL -> Out {out_amount} tokens | Price Impact: {price_impact}%")
+        try:
+            price_impact = float(quote.get("priceImpactPct", 0) or 0)
+        except Exception:
+            price_impact = 0.0
+            
+        logger.info(f"🎯 Jupiter Quote: In {buy_amount_sol} SOL -> Out {out_amount} tokens | Price Impact: {price_impact:.2f}%")
+
+        # Concentrated Liquidity / DLMM Bin Depletion Protection:
+        # If buying order causes excessive price impact (> max_slippage * 1.2), the active price bin is dry or single-sided!
+        max_allowed_impact = max(3.0, config.max_slippage_percent * 1.2)
+        if price_impact > max_allowed_impact:
+            return {
+                "success": False,
+                "error": f"Concentrated liquidity bin depleted! Price impact too high ({price_impact:.2f}% > max {max_allowed_impact:.1f}%)"
+            }
 
         # 3. Build swap transaction
         swap_tx_b64 = await self.build_jupiter_swap_transaction(quote, pub_b58, priority_fee)
