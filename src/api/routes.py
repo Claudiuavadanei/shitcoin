@@ -106,10 +106,15 @@ async def get_state():
             raw_state["trading_mode"] = "LIVE"
             try:
                 live_info = await solana_executor.get_live_wallet_balance()
-                raw_state["paper_balance_sol"] = live_info.get("sol_balance", 1.02)
-                raw_state["paper_balance_usd"] = live_info.get("usd_balance", 97.95)
-                raw_state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
-                raw_state["live_balance_usd"] = live_info.get("usd_balance", 97.95)
+                sol_b = live_info.get("sol_balance", 1.02)
+                usd_b = live_info.get("usd_balance", 97.95)
+                await db.sync_live_capital(sol_b, usd_b)
+                raw_state = await db.get_state()
+                raw_state["trading_mode"] = "LIVE"
+                raw_state["paper_balance_sol"] = sol_b
+                raw_state["paper_balance_usd"] = usd_b
+                raw_state["live_balance_sol"] = sol_b
+                raw_state["live_balance_usd"] = usd_b
                 raw_state["wallet_address"] = live_info.get("address", "")
             except Exception as e:
                 logger.debug(f"Error fetching live wallet balance: {e}")
@@ -344,11 +349,16 @@ async def websocket_broadcaster():
                     state["trading_mode"] = "LIVE"
                     try:
                         live_info = await solana_executor.get_live_wallet_balance()
-                        state["paper_balance_sol"] = live_info.get("sol_balance", 1.02)
-                        state["paper_balance_usd"] = live_info.get("usd_balance", 97.95)
-                        state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
-                        state["live_balance_usd"] = live_info.get("usd_balance", 97.95)
-
+                        sol_b = live_info.get("sol_balance", 1.02)
+                        usd_b = live_info.get("usd_balance", 97.95)
+                        await db.sync_live_capital(sol_b, usd_b)
+                        state = await db.get_state()
+                        state["trading_mode"] = "LIVE"
+                        state["paper_balance_sol"] = sol_b
+                        state["paper_balance_usd"] = usd_b
+                        state["live_balance_sol"] = sol_b
+                        state["live_balance_usd"] = usd_b
+                        state["wallet_address"] = live_info.get("address", "")
                     except Exception:
                         pass
 

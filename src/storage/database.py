@@ -399,7 +399,34 @@ class BotDatabase:
                 "best_trade_pct": 0.0,
                 "worst_trade_pct": 0.0
             }
-            self._save_to_disk()
+    async def sync_live_capital(self, live_sol: float, live_usd: float):
+        """Synchronizes initial capital and equity history with real Solana live wallet values."""
+        async with self.lock:
+            if live_usd <= 0:
+                return
+            
+            init_cap = self.data.get("initial_capital_usd", 1500.0)
+            total_profit = self.data.get("stats", {}).get("total_profit_usd", 0.0)
+            
+            # If initial capital is still on default paper ($1500 or >= 400) or needs real calibration
+            if init_cap >= 400.0 or abs(self.data.get("paper_balance_usd", 0) - 1500.0) < 50.0:
+                real_init = max(10.0, round(live_usd - total_profit, 2))
+                offset = init_cap - real_init
+                
+                sol_price = (live_usd / live_sol) if live_sol > 0 else 96.0
+                self.data["initial_capital_usd"] = real_init
+                self.data["initial_capital_sol"] = max(0.1, round(live_sol - (total_profit / sol_price), 4))
+                self.data["paper_balance_usd"] = round(live_usd, 2)
+                self.data["paper_balance_sol"] = round(live_sol, 4)
+                
+                for pt in self.data.get("equity_history", []):
+                    pt["total_equity_usd"] = max(1.0, round(pt.get("total_equity_usd", init_cap) - offset, 2))
+                    if "cash_usd" in pt:
+                        pt["cash_usd"] = max(1.0, round(pt.get("cash_usd", init_cap) - offset, 2))
+                    if real_init > 0:
+                        pt["roi_pct"] = round(((pt["total_equity_usd"] - real_init) / real_init) * 100.0, 2)
+                
+                self._save_to_disk()
 
 db = BotDatabase()
 
