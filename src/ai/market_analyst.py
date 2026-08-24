@@ -52,14 +52,34 @@ class MarketAnalyst:
                 # Estimate from price change
                 buy_ratio_pct = 70.0 if change_5m > 0 else (40.0 if change_5m < 0 else 50.0)
 
-        # B) Volume Spike Ratio (Velocity)
+        # B) Adaptive Volume Velocity (Lifecycle-Aware Velocity Model)
+        created_at_ms = token_data.get("created_at_ms", int(time.time() * 1000))
+        token_age_min = max(0.1, (time.time() * 1000 - created_at_ms) / 60000.0)
         vol_5m = float(pair_data.get("volume", {}).get("m5", 0) or 0)
-        if volume_24h > 0 and vol_5m > 0:
-            # Expected 5m volume if evenly distributed = volume_24h / 288
-            expected_5m = volume_24h / 288.0
-            volume_spike_ratio = min(15.0, max(0.5, vol_5m / expected_5m)) if expected_5m > 0 else 1.0
+
+        if token_age_min < 5.0:
+            # Phase 1: Block 0 / Fresh Launch (< 5 minutes old)
+            # Solves the "24h Volume Paradox" by measuring Liquidity Turnover & Transaction Frequency
+            turnover_ratio = (vol_5m / liquidity_usd) if liquidity_usd > 0 else 0.1
+            tx_intensity = total_txns_5m / max(0.5, token_age_min)  # Transactions per minute
+            
+            if turnover_ratio >= 0.20 or tx_intensity >= 8.0:
+                # Strong early organic momentum
+                volume_spike_ratio = min(10.0, max(1.5, 1.0 + (turnover_ratio * 5.0)))
+            elif change_5m > 5.0:
+                volume_spike_ratio = 2.0
+            else:
+                volume_spike_ratio = 1.0
         else:
-            volume_spike_ratio = 1.2 if change_5m > 2.0 else 1.0
+            # Phase 2 & 3: Maturing / Active Markets (>= 5 minutes old)
+            # Time-sliced expected volume normalized by actual token lifespan
+            effective_slices = min(288.0, max(1.0, token_age_min / 5.0))
+            expected_5m = (volume_24h / effective_slices) if volume_24h > 0 else (liquidity_usd * 0.1)
+            
+            if expected_5m > 0 and vol_5m > 0:
+                volume_spike_ratio = min(15.0, max(0.5, vol_5m / expected_5m))
+            else:
+                volume_spike_ratio = 1.2 if change_5m > 2.0 else 1.0
 
         # C) Liquidity-to-FDV Health
         fdv = float(token_data.get("fdv", 0) or 0)
