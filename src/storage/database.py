@@ -8,7 +8,20 @@ from config import DATA_DIR, config
 
 DB_FILE = DATA_DIR / "bot_state.json"
 
+def sanitize_json_val(obj):
+    import math
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    elif isinstance(obj, dict):
+        return {k: sanitize_json_val(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_json_val(v) for v in obj]
+    return obj
+
 class BotDatabase:
+
     def __init__(self):
         self.lock = asyncio.Lock()
         self.data: Dict[str, Any] = {
@@ -90,19 +103,6 @@ class BotDatabase:
         self._record_equity_snapshot()
         self._save_to_disk()
 
-
-def sanitize_json_val(obj):
-    import math
-    if isinstance(obj, float):
-        if math.isnan(obj) or math.isinf(obj):
-            return 0.0
-        return obj
-    elif isinstance(obj, dict):
-        return {k: sanitize_json_val(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [sanitize_json_val(v) for v in obj]
-    return obj
-
     def _save_to_disk(self):
         try:
             with open(DB_FILE, "w", encoding="utf-8") as f:
@@ -113,6 +113,7 @@ def sanitize_json_val(obj):
     async def get_state(self) -> Dict[str, Any]:
         async with self.lock:
             return sanitize_json_val(dict(self.data))
+
 
 
     async def get_active_positions(self) -> List[Dict[str, Any]]:
