@@ -328,6 +328,17 @@ async def websocket_broadcaster():
 
             if ws_manager.active_connections:
                 state = await db.get_state()
+                if config.trading_mode == "LIVE":
+                    state["trading_mode"] = "LIVE"
+                    try:
+                        live_info = await solana_executor.get_live_wallet_balance()
+                        state["paper_balance_sol"] = live_info.get("sol_balance", 1.02)
+                        state["paper_balance_usd"] = live_info.get("usd_balance", 183.60)
+                        state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
+                        state["live_balance_usd"] = live_info.get("usd_balance", 183.60)
+                    except Exception:
+                        pass
+
                 perf = await db.get_performance_analytics("all")
                 await ws_manager.broadcast({
                     "type": "STATE_UPDATE",
@@ -335,6 +346,8 @@ async def websocket_broadcaster():
                         "initial_capital_usd": state.get("initial_capital_usd", config.paper_balance_usd),
                         "paper_balance_sol": state.get("paper_balance_sol"),
                         "paper_balance_usd": state.get("paper_balance_usd"),
+                        "live_balance_sol": state.get("live_balance_sol"),
+                        "live_balance_usd": state.get("live_balance_usd"),
                         "positions": state.get("positions"),
                         "trade_history": state.get("trade_history")[:40],
                         "scanned_tokens": state.get("scanned_tokens")[:60],
@@ -353,6 +366,7 @@ async def websocket_broadcaster():
                         }
                     }
                 })
+
         except Exception as e:
             logger.debug(f"WS broadcast tick error: {e}")
         await asyncio.sleep(1.5)
