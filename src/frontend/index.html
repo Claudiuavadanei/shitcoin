@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHITCOIN SNIPER PRO // Autonomous AI Strategy & Growth Analytics</title>
+    <!-- Modern Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for High-Speed Performance & Equity Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="cyber-grid-bg"></div>
+    <div class="ambient-glow glow-cyan"></div>
+    <div class="ambient-glow glow-magenta"></div>
+
+    <div class="app-wrapper">
+        <!-- TOP NAVBAR -->
+        <header class="top-nav">
+            <div class="nav-brand">
+                <div class="logo-icon">⚡</div>
+                <div class="brand-text">
+                    <span class="brand-title">SHITCOIN <span class="accent-cyan">SNIPER PRO</span></span>
+                    <span class="brand-tag">v3.0 HIGH-WINRATE SCALPER & STRATEGY LAB</span>
+                </div>
+            </div>
+
+            <div class="nav-stats-bar">
+                <div class="nav-stat-chip">
+                    <span class="chip-label">MODE</span>
+                    <span id="navTradingMode" class="chip-value mode-badge paper">PAPER TRADING</span>
+                </div>
+                <div class="nav-stat-chip">
+                    <span class="chip-label">SOL BAL</span>
+                    <span id="navSolBalance" class="chip-value highlight-sol">10.00 SOL</span>
+                </div>
+                <div class="nav-stat-chip">
+                    <span class="chip-label">USD BAL</span>
+                    <span id="navUsdBalance" class="chip-value highlight-usd">$1,500.00</span>
+                </div>
+                <div class="nav-stat-chip">
+                    <span class="chip-label">NET PnL</span>
+                    <span id="navNetPnl" class="chip-value pnl-neutral">$0.00 (+0.0%)</span>
+                </div>
+                <div class="nav-stat-chip ai-sentiment-chip">
+                    <span class="chip-label">AI SENTIMENT</span>
+                    <span id="navAiSentiment" class="chip-value text-cyan">ANALYZING...</span>
+                </div>
+            </div>
+
+            <div class="nav-actions">
+                <div class="status-indicator-wrapper">
+                    <span id="wsStatusDot" class="status-dot connected"></span>
+                    <span id="wsStatusText" class="status-label">24/7 STREAM</span>
+                </div>
+                <button id="btnOpenAiChat" class="btn-icon btn-ai-pulse" title="Open AI Market Copilot">🤖</button>
+                <button id="btnOpenSettings" class="btn-icon" title="Strategy Settings">⚙️</button>
+                <button id="btnPanicSell" class="btn-danger-glow" title="Emergency Close All Open Positions">🚨 PANIC SELL ALL</button>
+            </div>
+        </header>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="main-dashboard">
+            <!-- TOP KPI CARDS -->
+            <section class="kpi-grid">
+                <div class="kpi-card glass-panel">
+                    <div class="kpi-header">
+                        <span class="kpi-title">TOTAL REALIZED PROFIT</span>
+                        <span class="kpi-icon text-cyan">📈</span>
+                    </div>
+                    <div class="kpi-body">
+                        <div id="kpiTotalProfitUsd" class="kpi-value text-green">$0.00</div>
+                        <div class="kpi-subtext">
+                            <span id="kpiWinRate" class="badge-win">0.0% Win Rate</span>
+                            <span id="kpiTradesCount" class="text-muted">0 Trades</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kpi-card glass-panel">
+                    <div class="kpi-header">
+                        <span class="kpi-title">OPEN POSITIONS (MAX 30)</span>
+                        <span class="kpi-icon text-magenta">🎯</span>
+                    </div>
+                    <div class="kpi-body">
+                        <div id="kpiOpenPositionsCount" class="kpi-value">0 / 30</div>
+                        <div class="kpi-subtext">
+                            <span id="kpiOpenPnlUsd" class="text-neutral">$0.00 Unrealized</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kpi-card glass-panel">
+                    <div class="kpi-header">
+                        <span class="kpi-title">AI ENGINE (70%+ SCALPER)</span>
+                        <span class="kpi-icon text-yellow">🧠</span>
+                    </div>
+                    <div class="kpi-body">
+                        <div class="toggle-control-group">
+                            <button id="btnToggleAutoBuy" class="btn-toggle active">AUTO-BUY: ON</button>
+                            <button id="btnToggleAiFilter" class="btn-toggle active">AI SMART: ON</button>
+                        </div>
+                        <div class="kpi-subtext text-muted">
+                            Min Conf: <span id="kpiMinAiConf" class="text-cyan">80%</span> | Min Score: <span id="kpiMinScore" class="text-cyan">80</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kpi-card glass-panel manual-snipe-card">
+                    <div class="kpi-header">
+                        <span class="kpi-title">INSTANT MANUAL SNIPER</span>
+                        <span class="kpi-icon text-cyan">⚡</span>
+                    </div>
+                    <div class="quick-snipe-form">
+                        <select id="manualChainSelect" class="cyber-select">
+                            <option value="solana">Solana</option>
+                            <option value="bsc">BSC</option>
+                            <option value="base">Base</option>
+                        </select>
+                        <input id="manualTokenInput" type="text" placeholder="Token Contract Address (Mint)..." class="cyber-input">
+                        <button id="btnManualSnipe" class="btn-cyber-primary">SNIPE</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STRATEGY PERFORMANCE & EQUITY GROWTH SECTION -->
+            <section class="performance-section glass-panel">
+                <div class="performance-header">
+                    <div class="performance-title-group">
+                        <span class="section-icon text-cyan">📊</span>
+                        <div>
+                            <h2 class="performance-heading">STRATEGY PERFORMANCE & CAPITAL GROWTH</h2>
+                            <div class="performance-subheading">Monitorizează evoluția capitalului de la suma de pornire până în prezent în 1H, 24H, 7D sau 30D.</div>
+                        </div>
+                    </div>
+
+                    <!-- Timeframe Switcher Tabs -->
+                    <div class="timeframe-tabs">
+                        <button class="tf-tab-btn" data-tf="1h">1 ORĂ</button>
+                        <button class="tf-tab-btn" data-tf="24h">24 ORE (1 ZI)</button>
+                        <button class="tf-tab-btn" data-tf="7d">7 ZILE</button>
+                        <button class="tf-tab-btn" data-tf="30d">30 ZILE (1 LUNĂ)</button>
+                        <button class="tf-tab-btn active" data-tf="all">ALL-TIME</button>
+                    </div>
+                </div>
+
+                <!-- ROI & Growth Metric Badges -->
+                <div class="analytics-metrics-grid">
+                    <div class="metric-badge-box">
+                        <span class="m-label">STARTING CAPITAL</span>
+                        <span id="metricStartingCapital" class="m-value font-mono">$1,500.00</span>
+                    </div>
+                    <div class="metric-badge-box">
+                        <span class="m-label">CURRENT PORTFOLIO EQUITY</span>
+                        <span id="metricCurrentEquity" class="m-value text-cyan font-mono">$1,500.00</span>
+                    </div>
+                    <div class="metric-badge-box">
+                        <span class="m-label" id="metricPeriodRoiLabel">TIMEFRAME ROI (%)</span>
+                        <span id="metricPeriodRoi" class="m-value text-green font-mono">+0.00%</span>
+                    </div>
+                    <div class="metric-badge-box">
+                        <span class="m-label">PROFIT NET ($)</span>
+                        <span id="metricPeriodProfitUsd" class="m-value text-green font-mono">+$0.00</span>
+                    </div>
+                    <div class="metric-badge-box">
+                        <span class="m-label">WIN RATE & FACTOR</span>
+                        <span id="metricWinRateFactor" class="m-value font-mono text-yellow">0.0% (0/0)</span>
+                    </div>
+                </div>
+
+                <!-- Interactive Chart Canvas -->
+                <div class="equity-chart-wrapper">
+                    <canvas id="equityGrowthChart"></canvas>
+                </div>
+            </section>
+
+            <!-- SPLIT VIEW: ACTIVE POSITIONS & LIVE RADAR -->
+            <div class="dashboard-split">
+                <!-- ACTIVE POSITIONS SECTION -->
+                <section class="dashboard-column left-column">
+                    <div class="section-header-bar">
+                        <div class="section-title-group">
+                            <span class="section-icon text-cyan">🔥</span>
+                            <h2>ACTIVE OPEN POSITIONS (AI & BE PROTECTED)</h2>
+                            <span id="activePositionsBadge" class="counter-badge">0</span>
+                        </div>
+                    </div>
+
+                    <div id="positionsContainer" class="positions-grid">
+                        <div class="empty-state glass-panel">
+                            <div class="empty-icon">🛰️</div>
+                            <h3>No Active Positions</h3>
+                            <p>Scanner is monitoring new pairs 24/7. AI Assistant will auto-snipe tokens with High Momentum & Safety Score ≥ 80.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- RADAR & DISCOVERED TOKENS FEED -->
+                <section class="dashboard-column right-column">
+                    <div class="section-header-bar">
+                        <div class="section-title-group">
+                            <span class="section-icon text-magenta">📡</span>
+                            <h2>LIVE ALPHA RADAR & AI THESIS FEED</h2>
+                            <span id="scannedTokensBadge" class="counter-badge">0</span>
+                        </div>
+                        <div class="chain-filter-chips">
+                            <span class="chain-chip active" data-chain="all">ALL</span>
+                            <span class="chain-chip" data-chain="solana">SOL</span>
+                            <span class="chain-chip" data-chain="bsc">BSC</span>
+                            <span class="chain-chip" data-chain="base">BASE</span>
+                        </div>
+                    </div>
+
+                    <div class="table-container glass-panel">
+                        <table class="cyber-table">
+                            <thead>
+                                <tr>
+                                    <th>TOKEN / PAIR</th>
+                                    <th>CHAIN</th>
+                                    <th>PRICE</th>
+                                    <th>LIQUIDITY</th>
+                                    <th>AI SIGNAL</th>
+                                    <th>SAFETY</th>
+                                    <th>ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scannedTokensTableBody">
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-6">Connecting to 24/7 multi-chain market radar...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <!-- LOWER VIEW: TRADE HISTORY & LIVE TERMINAL -->
+            <div class="dashboard-split lower-split">
+                <!-- TRADE LEDGER -->
+                <section class="dashboard-column left-column">
+                    <div class="section-header-bar">
+                        <div class="section-title-group">
+                            <span class="section-icon text-green">📜</span>
+                            <h2>TRADE HISTORY & AUDIT LEDGER</h2>
+                            <span id="tradeHistoryBadge" class="counter-badge">0</span>
+                        </div>
+                    </div>
+
+                    <div class="table-container glass-panel history-table-container">
+                        <table class="cyber-table">
+                            <thead>
+                                <tr>
+                                    <th>TIME</th>
+                                    <th>TOKEN</th>
+                                    <th>ENTRY</th>
+                                    <th>EXIT</th>
+                                    <th>PROFIT ($)</th>
+                                    <th>PROFIT (%)</th>
+                                    <th>EXIT REASON</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tradeHistoryTableBody">
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-6">No closed trades yet in current session.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- LIVE CONSOLE LOG -->
+                <section class="dashboard-column right-column">
+                    <div class="section-header-bar">
+                        <div class="section-title-group">
+                            <span class="section-icon text-yellow">📟</span>
+                            <h2>LIVE ENGINE TERMINAL</h2>
+                        </div>
+                        <div class="terminal-controls">
+                            <button id="btnClearLogs" class="btn-text-sm">CLEAR</button>
+                        </div>
+                    </div>
+
+                    <div class="terminal-panel glass-panel">
+                        <div id="terminalBody" class="terminal-feed">
+                            <div class="terminal-row log-info">[SYSTEM] Autonomous AI Sniper Engine active. Monitoring 24/7...</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- AI COPILOT CHAT DRAWER -->
+    <div id="aiCopilotDrawer" class="ai-copilot-drawer glass-panel">
+        <div class="copilot-header">
+            <div class="copilot-title">
+                <span class="copilot-dot"></span>
+                <span>AI MARKET COPILOT</span>
+            </div>
+            <button id="btnCloseAiChat" class="btn-close">✕</button>
+        </div>
+        <div class="copilot-market-banner">
+            <div id="copilotSentimentText" class="text-cyan font-mono" style="font-size: 11px;">Sentiment: Analyzing DEX momentum...</div>
+        </div>
+        <div id="copilotMessages" class="copilot-messages">
+            <div class="copilot-msg ai-msg">
+                👋 Salut! Sunt Asistentul tău AI de Tranzacționare. Monitorizez piața 24/7, calculez presiunea de cumpărare (Buy Pressure) și protejez pozițiile deschise prin Smart Exit și Auto Break-Even. Mă poți întreba orice despre starea pieței sau tokenii monitorizați!
+            </div>
+        </div>
+        <div class="copilot-quick-prompts">
+            <button class="prompt-pill" data-prompt="Cum este sentimentul pieței acum?">📊 Sentiment Piață</button>
+            <button class="prompt-pill" data-prompt="Ce părere ai despre pozițiile active?">🎯 Analiză Poziții</button>
+            <button class="prompt-pill" data-prompt="Cum funcționează Break-Even-ul tău?">🔒 Cum funcționează BE Lock?</button>
+        </div>
+        <div class="copilot-input-area">
+            <input id="copilotInput" type="text" placeholder="Întreabă AI Copilot..." class="cyber-input">
+            <button id="btnSendCopilot" class="btn-cyber-primary">TRIMITE</button>
+        </div>
+    </div>
+
+    <!-- SETTINGS & STRATEGY MODAL -->
+    <div id="settingsModal" class="modal-backdrop">
+        <div class="modal-dialog glass-panel">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <span class="text-cyan">⚙️</span> BOT STRATEGY & AI RISK CONFIGURATION
+                </div>
+                <button id="btnCloseSettings" class="btn-close">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label>Trading Mode</label>
+                        <select id="cfgTradingMode" class="cyber-select full-width">
+                            <option value="PAPER">PAPER TRADING (Simulation Mode)</option>
+                            <option value="LIVE">LIVE TRADING (Real RPC Swaps)</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>AI Smart Entry Filtering</label>
+                        <select id="cfgAiFiltering" class="cyber-select full-width">
+                            <option value="true">ENABLED (Only Buy Strong AI Signals)</option>
+                            <option value="false">DISABLED (Buy All Safe Scanned Tokens)</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Min AI Confidence Score (0-100%)</label>
+                        <input id="cfgMinAiConfidence" type="number" min="50" max="95" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>AI Smart Exit Monitoring</label>
+                        <select id="cfgAiSmartExit" class="cyber-select full-width">
+                            <option value="true">ENABLED (Exit on Volume Collapse / Whale Dumps)</option>
+                            <option value="false">DISABLED (Standard TP / SL Only)</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Buy Amount per Trade (USD)</label>
+                        <input id="cfgBuyAmountUsd" type="number" step="1" min="1" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Max Open Positions</label>
+                        <input id="cfgMaxOpenPositions" type="number" min="1" max="50" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Take Profit Target (%)</label>
+                        <input id="cfgTakeProfitPct" type="number" step="1" min="5" max="1000" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Auto Break-Even (Risk-Free Lock)</label>
+                        <select id="cfgBreakEvenEnabled" class="cyber-select full-width">
+                            <option value="true">ENABLED (Move SL to +1% at Target Gain)</option>
+                            <option value="false">DISABLED</option>
+                        </select>
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Break-Even Trigger (% Profit to Lock)</label>
+                        <input id="cfgBreakEvenTriggerPct" type="number" step="0.5" min="2" max="25" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Trailing Stop Offset (%)</label>
+                        <input id="cfgTrailingStopOffsetPct" type="number" step="0.5" min="1" max="50" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Hard Stop Loss (%)</label>
+                        <input id="cfgStopLossPct" type="number" step="1" min="1" max="90" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Min Safety Score (0-100)</label>
+                        <input id="cfgMinSafetyScore" type="number" min="0" max="100" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Min Liquidity Required (USD)</label>
+                        <input id="cfgMinLiquidityUsd" type="number" step="100" class="cyber-input full-width">
+                    </div>
+
+                    <div class="setting-group">
+                        <label>Max Dev / Top Holder Share (%)</label>
+                        <input id="cfgMaxDevHoldingPct" type="number" step="1" max="100" class="cyber-input full-width">
+                    </div>
+                </div>
+
+                <div class="reset-balance-box">
+                    <div class="reset-title">Reset Virtual Balance & Clear All Stats (PnL = $0.00)</div>
+                    <div class="reset-inputs">
+                        <input id="resetSolInput" type="number" value="10" placeholder="SOL" class="cyber-input">
+                        <input id="resetUsdInput" type="number" value="1500" placeholder="USD" class="cyber-input">
+                        <button id="btnResetBalance" class="btn-outline-cyan">FULL RESET (PnL = 0)</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btnCancelSettings" class="btn-secondary">CANCEL</button>
+                <button id="btnSaveSettings" class="btn-cyber-primary">SAVE STRATEGY CONFIG</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOKEN INSPECTOR & AI THESIS MODAL -->
+    <div id="inspectorModal" class="modal-backdrop">
+        <div class="modal-dialog glass-panel inspector-dialog">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <span class="text-cyan">🔍</span> ANTI-RUG & AI MOMENTUM AUDIT
+                </div>
+                <button id="btnCloseInspector" class="btn-close">✕</button>
+            </div>
+            <div id="inspectorModalBody" class="modal-body">
+                <div class="loading-spinner">Auditing token contract and AI momentum...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

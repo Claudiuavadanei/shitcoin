@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: shitcoin-sniper-pro
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: TRADING_MODE
+        value: PAPER
+      - key: AUTO_BUY_ENABLED
+        value: "true"
+      - key: MAX_OPEN_POSITIONS
+        value: "30"
+      - key: TAKE_PROFIT_PERCENT
+        value: "18.0"
+      - key: STOP_LOSS_PERCENT
+        value: "12.0"
+      - key: MIN_LIQUIDITY_USD
+        value: "8000.0"
+      - key: MIN_SAFETY_SCORE
+        value: "80"
