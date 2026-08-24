@@ -194,9 +194,11 @@ async def full_reset(req: Optional[ResetBalanceRequest] = None):
     sol = req.sol if req else config.paper_balance_sol
     usd = req.usd if req else config.paper_balance_usd
     await db.full_reset(sol, usd)
+    scanner.seen_tokens.clear()
     await db.add_log("SUCCESS", f"🔄 Full System Reset performed. Balances reset to {sol} SOL / ${usd:,.2f} USD. PnL: $0.00.")
     await ws_manager.broadcast({"type": "FULL_RESET"})
     return {"success": True, "message": "Full system reset completed"}
+
 
 
 @router.post("/bot/panic-sell-all")

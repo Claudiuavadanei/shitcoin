@@ -122,9 +122,10 @@ class MarketScanner:
                         self.seen_tokens.add(token_addr)
                         self.total_discovered += 1
                         
-                        # Memory protection: Keep seen tokens bounded
-                        if len(self.seen_tokens) > 10000:
-                            self.seen_tokens = set(list(self.seen_tokens)[-5000:])
+                        # Memory protection: Keep seen tokens bounded for continuous fresh discovery
+                        if len(self.seen_tokens) > 500:
+                            self.seen_tokens = set(list(self.seen_tokens)[-250:])
+
 
                         # Perform safety & anti-rug screening
                         chain = token.get("chain", "solana")
