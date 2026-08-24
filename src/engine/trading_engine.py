@@ -56,8 +56,13 @@ class TradingEngine:
             return
 
         token_address = token_data.get("token_address")
-        chain = token_data.get("chain", "solana")
+        chain = token_data.get("chain", "solana").lower()
         symbol = token_data.get("symbol", "TOKEN")
+
+        # In LIVE mode, strictly ignore any non-Solana token
+        if config.trading_mode == "LIVE" and chain != "solana":
+            return
+
 
         # Check AI Market Intelligence Decision
         if config.ai_filtering_enabled:
@@ -86,8 +91,15 @@ class TradingEngine:
     async def buy_token(self, token_address: str, chain: str = "solana", amount_usd: Optional[float] = None, token_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Opens a new position in Paper or Live trading mode."""
         async with self.lock:
+            # Strict chain check in LIVE mode
+            if config.trading_mode == "LIVE" and (chain or "").lower() != "solana":
+                msg = f"Rejected {token_address} on {chain.upper()}: Only Solana tokens are allowed in LIVE mode."
+                logger.warning(msg)
+                return {"success": False, "error": msg}
+
             # Check existing position
             existing = await db.get_position(token_address)
+
             if existing:
                 msg = f"Already holding open position for {token_address}"
                 logger.warning(msg)
