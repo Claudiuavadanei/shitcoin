@@ -106,10 +106,11 @@ async def get_state():
             try:
                 live_info = await solana_executor.get_live_wallet_balance()
                 raw_state["paper_balance_sol"] = live_info.get("sol_balance", 1.02)
-                raw_state["paper_balance_usd"] = live_info.get("usd_balance", 183.60)
+                raw_state["paper_balance_usd"] = live_info.get("usd_balance", 97.95)
                 raw_state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
-                raw_state["live_balance_usd"] = live_info.get("usd_balance", 183.60)
+                raw_state["live_balance_usd"] = live_info.get("usd_balance", 97.95)
                 raw_state["wallet_address"] = live_info.get("address", "")
+
             except Exception as e:
                 logger.debug(f"Error fetching live wallet balance: {e}")
             
@@ -334,9 +335,10 @@ async def websocket_broadcaster():
                     try:
                         live_info = await solana_executor.get_live_wallet_balance()
                         state["paper_balance_sol"] = live_info.get("sol_balance", 1.02)
-                        state["paper_balance_usd"] = live_info.get("usd_balance", 183.60)
+                        state["paper_balance_usd"] = live_info.get("usd_balance", 97.95)
                         state["live_balance_sol"] = live_info.get("sol_balance", 1.02)
-                        state["live_balance_usd"] = live_info.get("usd_balance", 183.60)
+                        state["live_balance_usd"] = live_info.get("usd_balance", 97.95)
+
                     except Exception:
                         pass
 
