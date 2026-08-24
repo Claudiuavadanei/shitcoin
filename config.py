@@ -64,12 +64,31 @@ class BotConfig(BaseModel):
     # Chains to scan (e.g., solana, bsc, base, ethereum)
     enabled_chains: list[str] = ["solana", "bsc", "base"]
 
-    # Live Trading Credentials (Optional)
+    # Solana Live Execution & MEV Infrastructure
     solana_rpc_url: str = Field(default_factory=lambda: os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com"))
+    solana_ws_url: str = Field(default_factory=lambda: os.getenv("SOLANA_WS_URL", "wss://api.mainnet-beta.solana.com"))
     solana_private_key: str = Field(default_factory=lambda: os.getenv("SOLANA_PRIVATE_KEY", ""))
+    
+    # Jito MEV Bundle Settings
+    jito_mev_enabled: bool = Field(default_factory=lambda: os.getenv("JITO_MEV_ENABLED", "true").lower() == "true")
+    jito_tip_sol: float = Field(default_factory=lambda: float(os.getenv("JITO_TIP_SOL", "0.001")))
+    jito_block_engine_url: str = Field(default_factory=lambda: os.getenv("JITO_BLOCK_ENGINE_URL", "https://mainnet.block-engine.jito.wtf"))
+    
+    # Dynamic Priority Fees & Slippage
+    dynamic_priority_fee_enabled: bool = Field(default_factory=lambda: os.getenv("DYNAMIC_PRIORITY_FEE_ENABLED", "true").lower() == "true")
+    max_priority_fee_micro_lamports: int = Field(default_factory=lambda: int(os.getenv("MAX_PRIORITY_FEE_MICRO_LAMPORTS", "200000")))
+    max_slippage_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_SLIPPAGE_PERCENT", "3.5")))
+    
+    # Token-2022 Anti-Rug Scanner & Network Resiliency
+    token_2022_tax_check: bool = Field(default_factory=lambda: os.getenv("TOKEN_2022_TAX_CHECK", "true").lower() == "true")
+    tx_retry_limit: int = Field(default_factory=lambda: int(os.getenv("TX_RETRY_LIMIT", "5")))
+    tx_confirm_timeout_sec: int = Field(default_factory=lambda: int(os.getenv("TX_CONFIRM_TIMEOUT_SEC", "8")))
+
+    # EVM Live Settings (Optional)
     evm_rpc_url: str = Field(default_factory=lambda: os.getenv("EVM_RPC_URL", "https://bsc-dataseed.binance.org/"))
     evm_private_key: str = Field(default_factory=lambda: os.getenv("EVM_PRIVATE_KEY", ""))
 
 # Global Singleton Config Instance
 config = BotConfig()
+
 

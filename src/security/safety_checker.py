@@ -69,7 +69,6 @@ class SafetyChecker:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=2.0)) as resp:
                 if resp.status == 200:
                     data = await resp.json(content_type=None)
-
                     
                     # Mint authority
                     mint_auth = data.get("token", {}).get("mintAuthority")
@@ -110,6 +109,52 @@ class SafetyChecker:
             logger.debug(f"RugCheck lookup failed for {token_address}: {e}")
             flags.append("Heuristic evaluation active")
 
+        # Query Solana RPC for Token-2022 extensions & hidden transfer fee tax check
+        is_token_2022 = False
+        token_2022_tax_pct = 0.0
+        has_permanent_delegate = False
+        if config.token_2022_tax_check:
+            try:
+                rpc_payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getAccountInfo",
+                    "params": [
+                        token_address,
+                        {"encoding": "jsonParsed", "commitment": "confirmed"}
+                    ]
+                }
+                async with session.post(config.solana_rpc_url, json=rpc_payload, timeout=aiohttp.ClientTimeout(total=2.0)) as rpc_resp:
+                    if rpc_resp.status == 200:
+                        rpc_data = await rpc_resp.json(content_type=None)
+                        val = rpc_data.get("result", {}).get("value")
+                        if val:
+                            owner = val.get("owner", "")
+                            if owner == "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb":
+                                is_token_2022 = True
+                                flags.append("Token-2022 Standard Mint")
+                                parsed_data = val.get("data", {}).get("parsed", {}).get("info", {})
+                                extensions = parsed_data.get("extensions", [])
+                                for ext in extensions:
+                                    ext_type = ext.get("extension")
+                                    ext_state = ext.get("state", {})
+                                    if ext_type == "transferFeeConfig":
+                                        fee_bps = int(ext_state.get("newerTransferFee", {}).get("transferFeeBasisPoints", 0) or ext_state.get("olderTransferFee", {}).get("transferFeeBasisPoints", 0) or 0)
+                                        token_2022_tax_pct = fee_bps / 100.0
+                                        if token_2022_tax_pct > 0:
+                                            warnings.append(f"🚨 Token-2022 Transfer Fee Active (Tax: {token_2022_tax_pct}%)")
+                                            buy_tax = max(buy_tax, token_2022_tax_pct)
+                                            sell_tax = max(sell_tax, token_2022_tax_pct)
+                                    elif ext_type == "permanentDelegate":
+                                        has_permanent_delegate = True
+                                        warnings.append("🚨 Token-2022 Permanent Delegate (Dev can burn/confiscate tokens)")
+                                    elif ext_type == "defaultAccountState":
+                                        if ext_state.get("accountState") == "frozen":
+                                            warnings.append("🚨 Token-2022 Default Frozen (Buyer tokens auto-locked)")
+            except Exception as e:
+                logger.debug(f"Token-2022 RPC lookup exception for {token_address}: {e}")
+
+
         # Evaluate Safety Score (0 to 100)
         score = 100
         
@@ -117,6 +162,10 @@ class SafetyChecker:
             score -= 35
         if not freeze_auth_disabled:
             score -= 30
+        if token_2022_tax_pct > 0:
+            score -= 50
+        if has_permanent_delegate:
+            score -= 40
         if dev_holding_pct > config.max_dev_holding_percent:
             penalty = min(25, int((dev_holding_pct - config.max_dev_holding_percent) * 1.5))
             score -= penalty
@@ -150,9 +199,12 @@ class SafetyChecker:
             score >= config.min_safety_score
             and mint_auth_disabled
             and freeze_auth_disabled
+            and token_2022_tax_pct <= config.max_buy_tax_percent
+            and not has_permanent_delegate
             and dev_holding_pct <= (config.max_dev_holding_percent * 1.5)
             and liquidity_usd >= config.min_liquidity_usd
         )
+
 
         return {
             "token_address": token_address,

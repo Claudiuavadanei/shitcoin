@@ -12,8 +12,10 @@ from src.scanner.market_scanner import scanner
 from src.security.safety_checker import safety_checker
 from src.ai.market_analyst import market_analyst
 from src.ai.smart_exit import smart_exit
+from src.engine.solana_live_executor import solana_executor
 
 logger = logging.getLogger("TradingEngine")
+
 
 class TradingEngine:
     def __init__(self):
@@ -123,10 +125,22 @@ class TradingEngine:
                     await db.add_log("ERROR", msg)
                     return {"success": False, "error": msg}
 
+            # Live on-chain execution with Jito MEV + Jupiter V6 router
+            live_meta = {}
+            if config.trading_mode == "LIVE" and chain == "solana":
+                live_res = await solana_executor.execute_live_snipe(token_address, buy_sol)
+                if not live_res.get("success"):
+                    err_msg = live_res.get("error", "Live execution failed")
+                    logger.error(f"Live snipe failed for {token_address}: {err_msg}")
+                    await db.add_log("ERROR", f"❌ Live Snipe Failed: {err_msg}")
+                    return {"success": False, "error": err_msg}
+                live_meta = live_res
+
             # Calculate token quantity
             # Apply simulated slippage (e.g. 0.5% - 1.5%)
             slippage_factor = 1.0 - (min(config.max_slippage_percent, 1.0) / 100.0)
             token_amount = (buy_usd / price_usd) * slippage_factor
+
 
             # Calculate target exit prices
             tp_target = price_usd * (1.0 + (config.take_profit_percent / 100.0))
@@ -323,7 +337,15 @@ class TradingEngine:
             "status": "CLOSED"
         }
 
+        # Live exit on-chain if in LIVE mode
+        if config.trading_mode == "LIVE" and pos.get("chain") == "solana":
+            try:
+                await solana_executor.execute_live_sell(token_address, pos.get("token_amount", 0.0))
+            except Exception as e:
+                logger.error(f"Live exit exception for {token_address}: {e}")
+
         closed_trade = await db.close_position(token_address, exit_data)
+
         
         is_win = profit_usd >= 0
         log_type = "SUCCESS" if is_win else "ERROR"

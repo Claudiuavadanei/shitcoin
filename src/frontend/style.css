@@ -135,8 +135,41 @@ h1, h2, h3, .brand-title {
 .accent-cyan { color: var(--neon-cyan); text-shadow: 0 0 16px var(--neon-cyan-glow); }
 .font-mono { font-family: var(--font-mono); }
 
+/* Execution Defense Banner */
+.execution-defense-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    gap: 16px;
+    border-radius: var(--radius-sm);
+    background: rgba(14, 20, 36, 0.7);
+    border: 1px solid rgba(0, 240, 255, 0.15);
+}
+
+.defense-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.defense-icon {
+    font-size: 14px;
+}
+
+@media (max-width: 1024px) {
+    .execution-defense-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+}
+
 /* TOP NAVBAR */
 .top-nav {
+
     display: flex;
     align-items: center;
     justify-content: space-between;
