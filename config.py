@@ -47,19 +47,20 @@ class BotConfig(BaseModel):
     stop_loss_percent: float = Field(default_factory=lambda: float(os.getenv("STOP_LOSS_PERCENT", "12.0")))
     max_hold_time_minutes: int = Field(default_factory=lambda: int(os.getenv("MAX_HOLD_TIME_MINUTES", "60")))
 
-    # Safety & Anti-Rug Thresholds
-    min_liquidity_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_LIQUIDITY_USD", "8000.0")))
-    min_volume_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_VOLUME_USD", "1000.0")))
-    max_dev_holding_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_DEV_HOLDING_PERCENT", "15.0")))
+    # Safety & Anti-Rug Thresholds (Calibrated for active Solana trading)
+    min_liquidity_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_LIQUIDITY_USD", "3500.0")))
+    min_volume_usd: float = Field(default_factory=lambda: float(os.getenv("MIN_VOLUME_USD", "500.0")))
+    max_dev_holding_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_DEV_HOLDING_PERCENT", "20.0")))
     max_buy_tax_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_BUY_TAX_PERCENT", "5.0")))
     max_sell_tax_percent: float = Field(default_factory=lambda: float(os.getenv("MAX_SELL_TAX_PERCENT", "5.0")))
-    min_safety_score: int = Field(default_factory=lambda: int(os.getenv("MIN_SAFETY_SCORE", "80")))
+    min_safety_score: int = Field(default_factory=lambda: int(os.getenv("MIN_SAFETY_SCORE", "60")))
     
     # AI Market Intelligence & Smart Assistant Settings
     ai_filtering_enabled: bool = Field(default_factory=lambda: os.getenv("AI_FILTERING_ENABLED", "true").lower() == "true")
-    min_ai_confidence: int = Field(default_factory=lambda: int(os.getenv("MIN_AI_CONFIDENCE", "80")))
+    min_ai_confidence: int = Field(default_factory=lambda: int(os.getenv("MIN_AI_CONFIDENCE", "65")))
     ai_smart_exit_enabled: bool = Field(default_factory=lambda: os.getenv("AI_SMART_EXIT_ENABLED", "true").lower() == "true")
     gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+
 
 
     # Chains to scan (Only solana when live trading with Solana wallet)
