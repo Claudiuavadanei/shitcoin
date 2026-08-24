@@ -277,7 +277,26 @@ class BotDatabase:
                 self.data["scanned_tokens"] = self.data["scanned_tokens"][:100]
             self._save_to_disk()
 
+    async def add_scanned_token(self, token: Dict[str, Any]):
+        async with self.lock:
+            if "scanned_tokens" not in self.data:
+                self.data["scanned_tokens"] = []
+            token_addr = token.get("token_address")
+            self.data["scanned_tokens"] = [
+                t for t in self.data["scanned_tokens"]
+                if t.get("token_address") != token_addr
+            ]
+            self.data["scanned_tokens"].insert(0, token)
+            if len(self.data["scanned_tokens"]) > 100:
+                self.data["scanned_tokens"] = self.data["scanned_tokens"][:100]
+            self._save_to_disk()
+
+    async def get_scanned_tokens(self) -> List[Dict[str, Any]]:
+        async with self.lock:
+            return list(self.data.get("scanned_tokens", []))
+
     async def add_log(self, level: str, message: str, meta: Optional[Dict] = None):
+
         async with self.lock:
             log_item = {
                 "id": str(time.time()),
