@@ -27,7 +27,65 @@ JITO_TIP_ACCOUNTS = [
     "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT"
 ]
 
+# BIP58 & BIP39 Solana Key Derivation Helpers
+B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+def b58encode(b: bytes) -> str:
+    n = int.from_bytes(b, 'big')
+    res = []
+    while n > 0:
+        n, r = divmod(n, 58)
+        res.append(B58_ALPHABET[r])
+    pad = 0
+    for byte in b:
+        if byte == 0: pad += 1
+        else: break
+    return '1' * pad + ''.join(reversed(res))
+
+def b58decode(s: str) -> bytes:
+    n = 0
+    for char in s:
+        n = n * 58 + B58_ALPHABET.index(char)
+    res = n.to_bytes((n.bit_length() + 7) // 8, 'big') if n > 0 else b''
+    pad = 0
+    for char in s:
+        if char == '1': pad += 1
+        else: break
+    return b'\x00' * pad + res
+
+def mnemonic_to_seed(mnemonic: str, passphrase: str = '') -> bytes:
+    import hashlib
+    mnemonic_bytes = ' '.join(mnemonic.strip().split()).encode('utf-8')
+    salt = ('mnemonic' + passphrase).encode('utf-8')
+    return hashlib.pbkdf2_hmac('sha512', mnemonic_bytes, salt, 2048)
+
+def derive_solana_private_key(seed: bytes, path: str = 'm/44/501/0/0') -> bytes:
+    import hmac, hashlib, struct
+    h = hmac.new(b'ed25519 seed', seed, hashlib.sha512).digest()
+    key, chain_code = h[:32], h[32:]
+    segments = path.split('/')[1:]
+    for seg in segments:
+        idx = int(seg) + 0x80000000
+        data = b'\x00' + key + struct.pack('>I', idx)
+        h = hmac.new(chain_code, data, hashlib.sha512).digest()
+        key, chain_code = h[:32], h[32:]
+    return key
+
+def resolve_solana_private_key(key_or_mnemonic: str) -> str:
+    """
+    Accepts 12/24 word recovery phrase, Base58 private key, or JSON array,
+    and returns a clean Base58 private key string.
+    """
+    raw = key_or_mnemonic.strip()
+    words = raw.split()
+    if len(words) in [12, 24]:
+        seed = mnemonic_to_seed(raw)
+        priv_bytes = derive_solana_private_key(seed)
+        return b58encode(priv_bytes)
+    return raw
+
 SOL_MINT = "So11111111111111111111111111111111111111112"
+
 
 class SolanaLiveExecutor:
     def __init__(self):
@@ -170,8 +228,10 @@ class SolanaLiveExecutor:
         """
         Executes an on-chain sniper buy order on Solana with Jito MEV + Dynamic Compute Fees + Strict Slippage.
         """
-        if not config.solana_private_key:
+        clean_key = resolve_solana_private_key(config.solana_private_key)
+        if not clean_key:
             return {"success": False, "error": "SOLANA_PRIVATE_KEY is not configured in environment"}
+
 
         amount_lamports = int(buy_amount_sol * 1_000_000_000)
         slippage_bps = int(config.max_slippage_percent * 100)  # e.g. 3.5% = 350 bps
