@@ -307,11 +307,19 @@ class MarketScanner:
                     data = await resp.json()
                     pairs = data.get("pairs", [])
                     if pairs:
-                        best_pair = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
-                        base_token = best_pair.get("baseToken", {})
+                        def get_pair_liq(p):
+                            liq = p.get("liquidity") if isinstance(p, dict) else None
+                            if isinstance(liq, dict):
+                                return float(liq.get("usd", 0) or 0)
+                            return 0.0
+
+                        best_pair = max(pairs, key=get_pair_liq)
+                        base_token = best_pair.get("baseToken", {}) if isinstance(best_pair, dict) else {}
                         price_usd = float(best_pair.get("priceUsd", 0) or 0)
                         price_native = float(best_pair.get("priceNative", 0) or 0)
-                        liquidity_usd = float(best_pair.get("liquidity", {}).get("usd", 0) or 0)
+                        liq_obj = best_pair.get("liquidity") if isinstance(best_pair, dict) else None
+                        liquidity_usd = float(liq_obj.get("usd", 0) or 0) if isinstance(liq_obj, dict) else 0.0
+
                         volume_24h = float(best_pair.get("volume", {}).get("h24", 0) or 0)
                         pair_created_at = best_pair.get("pairCreatedAt", int(time.time() * 1000))
                         detected_chain = best_pair.get("chainId", chain or "solana").lower()
