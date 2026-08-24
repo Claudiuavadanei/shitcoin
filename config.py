@@ -18,8 +18,9 @@ class BotConfig(BaseModel):
     port: int = Field(default_factory=lambda: int(os.getenv("PORT", "8080")))
     host: str = Field(default_factory=lambda: os.getenv("HOST", "0.0.0.0"))
 
-    # Mode: "PAPER" or "LIVE"
-    trading_mode: str = Field(default_factory=lambda: os.getenv("TRADING_MODE", "PAPER").upper())
+    # Mode: Default to LIVE
+    trading_mode: str = Field(default_factory=lambda: os.getenv("TRADING_MODE", "LIVE").upper())
+
     
     # Virtual balances for Paper Trading
     paper_balance_sol: float = Field(default_factory=lambda: float(os.getenv("PAPER_BALANCE_SOL", "10.0")))

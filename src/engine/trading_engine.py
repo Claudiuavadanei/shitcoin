@@ -142,10 +142,13 @@ class TradingEngine:
                 live_meta = live_res
 
 
-            # Calculate token quantity
-            # Apply simulated slippage (e.g. 0.5% - 1.5%)
-            slippage_factor = 1.0 - (min(config.max_slippage_percent, 1.0) / 100.0)
-            token_amount = (buy_usd / price_usd) * slippage_factor
+            # Real on-chain token quantity from Jupiter quote
+            if live_meta and live_meta.get("quote"):
+                out_lamports = float(live_meta["quote"].get("outAmount", 0))
+                token_amount = out_lamports if out_lamports > 0 else (buy_usd / price_usd)
+            else:
+                token_amount = (buy_usd / price_usd)
+
 
 
             # Calculate target exit prices
