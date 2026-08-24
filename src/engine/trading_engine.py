@@ -370,6 +370,17 @@ class TradingEngine:
                         pnl_pct = pos.get("pnl_pct", 0.0)
                         pnl_usd = pos.get("pnl_usd", 0.0)
                         await self._exit_position(pos, curr_price, pnl_usd, pnl_pct, f"TIMEOUT (Held {int(elapsed_min)}m) ⏱️")
+
+                # 3. Periodic Auto-Sweep of Residual / Untracked / Erroneous Wallet Tokens (Every 3 minutes)
+                if not hasattr(self, "_last_sweep_time"):
+                    self._last_sweep_time = 0
+                if config.trading_mode == "LIVE" and (now - self._last_sweep_time) >= 180.0:
+                    self._last_sweep_time = now
+                    try:
+                        await self.auto_sweep_untracked_tokens()
+                    except Exception as e:
+                        logger.debug(f"Periodic auto-sweep exception: {e}")
+
             except Exception as e:
                 logger.error(f"Error in watchdog loop: {e}")
             await asyncio.sleep(5.0)
@@ -436,7 +447,6 @@ class TradingEngine:
         pnl_pct = ((curr_price - entry_price) / entry_price * 100.0) if entry_price > 0 else 0.0
         invested_usd = pos.get("invested_usd", 0.0)
         pnl_usd = invested_usd * (pnl_pct / 100.0)
-
         closed = await self._exit_position(pos, curr_price, pnl_usd, pnl_pct, reason)
         return {"success": True, "trade": closed}
 
@@ -449,5 +459,44 @@ class TradingEngine:
             results.append(res)
         await db.add_log("WARN", f"🚨 Panic Sell triggered: Closed {len(results)} positions")
         return {"success": True, "closed_count": len(results)}
+
+    async def auto_sweep_untracked_tokens(self) -> List[Dict[str, Any]]:
+        """
+        Scans user's Solana wallet for any untracked / erroneous / residual tokens
+        and automatically converts 100% of them back into pure SOL on-chain.
+        """
+        if config.trading_mode != "LIVE" or not config.solana_private_key:
+            return []
+
+        try:
+            from src.engine.solana_live_executor import get_solana_keypair
+            sk_32, pk_32, pub_b58 = get_solana_keypair(config.solana_private_key)
+        except Exception as e:
+            logger.error(f"Auto-sweep keypair error: {e}")
+            return []
+
+        active_positions = await db.get_active_positions()
+        active_mints = {pos.get("token_address") for pos in active_positions if pos.get("token_address")}
+
+        wallet_tokens = await solana_executor.get_all_wallet_token_accounts(pub_b58)
+        results = []
+
+        for token in wallet_tokens:
+            mint = token["mint"]
+            # If token is NOT an active open position currently being held for TP
+            if mint not in active_mints:
+                logger.info(f"🧹 Auto-Sweeping untracked/erroneous token {mint} ({token['ui_amount']} tokens) back to SOL...")
+                sell_res = await solana_executor.execute_live_sell(mint, token["ui_amount"])
+                if sell_res.get("success"):
+                    sig = sell_res.get("signature")
+                    msg = f"🧹 AUTO-SWEEP SUCCESS: Converted {mint[:8]}... ({token['ui_amount']:,.2f} tokens) back to SOL! 🔗 https://solscan.io/tx/{sig}"
+                    logger.info(msg)
+                    await db.add_log("SUCCESS", msg, {"mint": mint, "signature": sig})
+                    results.append({"mint": mint, "success": True, "signature": sig})
+                else:
+                    logger.warning(f"⚠️ Auto-sweep note for {mint}: {sell_res.get('error')}")
+                    results.append({"mint": mint, "success": False, "error": sell_res.get("error")})
+
+        return results
 
 trading_engine = TradingEngine()

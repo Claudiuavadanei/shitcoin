@@ -246,6 +246,12 @@ async def panic_sell_all():
     res = await trading_engine.panic_sell_all()
     return res
 
+@router.post("/bot/sweep-wallet")
+async def sweep_wallet():
+    """Sweeps all untracked/residual/erroneous tokens from the Solana wallet back into SOL."""
+    res = await trading_engine.auto_sweep_untracked_tokens()
+    return {"success": True, "swept_tokens": res}
+
 @router.post("/trade/buy")
 async def manual_buy(req: BuyRequest):
     details = await scanner.fetch_token_details(req.chain, req.token_address)

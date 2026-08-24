@@ -555,6 +555,42 @@ class SolanaLiveExecutor:
             logger.debug(f"Failed to fetch raw token balance for {token_mint}: {e}")
         return 0
 
+    async def get_all_wallet_token_accounts(self, user_public_key: str) -> List[Dict[str, Any]]:
+        """Fetches all SPL token accounts owned by the wallet with positive balance."""
+        session = await self._get_session()
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTokenAccountsByOwner",
+            "params": [
+                user_public_key,
+                {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
+                {"encoding": "jsonParsed"}
+            ]
+        }
+        tokens = []
+        try:
+            async with session.post(config.solana_rpc_url, json=payload, timeout=aiohttp.ClientTimeout(total=5.0)) as resp:
+                if resp.status == 200:
+                    data = await resp.json(content_type=None)
+                    accounts = data.get("result", {}).get("value", [])
+                    for acc in accounts:
+                        info = acc.get("account", {}).get("data", {}).get("parsed", {}).get("info", {})
+                        mint = info.get("mint")
+                        amount_info = info.get("tokenAmount", {})
+                        raw_amount = int(amount_info.get("amount", "0") or 0)
+                        ui_amount = float(amount_info.get("uiAmount", 0) or 0)
+                        if raw_amount > 0 and mint and mint != SOL_MINT:
+                            tokens.append({
+                                "mint": mint,
+                                "raw_amount": raw_amount,
+                                "ui_amount": ui_amount,
+                                "decimals": amount_info.get("decimals", 6)
+                            })
+        except Exception as e:
+            logger.debug(f"Failed to fetch all token accounts: {e}")
+        return tokens
+
     async def execute_live_sell(self, token_address: str, token_amount: float) -> Dict[str, Any]:
         """
         Executes an on-chain sniper sell order to exit into SOL with MEV sandwich protection.
