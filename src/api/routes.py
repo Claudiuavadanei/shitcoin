@@ -235,10 +235,12 @@ async def panic_sell_all():
 
 @router.post("/trade/buy")
 async def manual_buy(req: BuyRequest):
-    res = await trading_engine.buy_token(req.token_address, req.chain, req.amount_usd)
+    details = await scanner.fetch_token_details(req.chain, req.token_address)
+    res = await trading_engine.buy_token(req.token_address, req.chain, req.amount_usd, token_details=details)
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", "Buy failed"))
     return res
+
 
 @router.post("/trade/sell")
 async def manual_sell(req: SellRequest):
