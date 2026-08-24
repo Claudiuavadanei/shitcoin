@@ -182,16 +182,21 @@ class TradingEngine:
                 "pnl_pct": 0.0,
                 "status": "OPEN",
                 "mode": config.trading_mode,
+                "signature": live_meta.get("signature", ""),
+                "solscan_url": live_meta.get("solscan_url", ""),
                 "url": token_details.get("url", f"https://dexscreener.com/{chain}/{token_address}")
             }
 
             await db.add_position(position)
             
             log_msg = f"🚀 SNIPED {position['symbol']} on {chain.upper()} @ ${price_usd:.8f} | Invested: ${buy_usd:.2f} | TP: +{config.take_profit_percent}% | SL: -{config.stop_loss_percent}%"
-            await db.add_log("SUCCESS", log_msg, {"token": token_address, "price": price_usd, "invested": buy_usd, "thesis": position["ai_thesis"]})
+            if live_meta.get("signature"):
+                log_msg += f" | 🔗 Solscan: https://solscan.io/tx/{live_meta.get('signature')}"
+            await db.add_log("SUCCESS", log_msg, {"token": token_address, "price": price_usd, "invested": buy_usd, "thesis": position["ai_thesis"], "signature": live_meta.get("signature")})
             logger.info(log_msg)
 
             return {"success": True, "position": position}
+
 
     async def on_price_updated(self, token_address: str, current_price: float):
         """Called whenever a new price tick arrives for an active position."""

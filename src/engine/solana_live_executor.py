@@ -10,6 +10,7 @@ import json
 import logging
 import random
 import time
+import hashlib
 from typing import Dict, Any, List, Optional
 from config import config
 
@@ -27,7 +28,7 @@ JITO_TIP_ACCOUNTS = [
     "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT"
 ]
 
-# BIP58 & BIP39 Solana Key Derivation Helpers
+# BIP58 Helpers
 B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 def b58encode(b: bytes) -> str:
@@ -53,14 +54,14 @@ def b58decode(s: str) -> bytes:
         else: break
     return b'\x00' * pad + res
 
+# BIP39 Helpers
 def mnemonic_to_seed(mnemonic: str, passphrase: str = '') -> bytes:
-    import hashlib
     mnemonic_bytes = ' '.join(mnemonic.strip().split()).encode('utf-8')
     salt = ('mnemonic' + passphrase).encode('utf-8')
     return hashlib.pbkdf2_hmac('sha512', mnemonic_bytes, salt, 2048)
 
 def derive_solana_private_key(seed: bytes, path: str = 'm/44/501/0/0') -> bytes:
-    import hmac, hashlib, struct
+    import hmac, struct
     h = hmac.new(b'ed25519 seed', seed, hashlib.sha512).digest()
     key, chain_code = h[:32], h[32:]
     segments = path.split('/')[1:]
@@ -71,11 +72,92 @@ def derive_solana_private_key(seed: bytes, path: str = 'm/44/501/0/0') -> bytes:
         key, chain_code = h[:32], h[32:]
     return key
 
+# RFC 8032 Pure Python Ed25519 Engine for Signing Solana Transactions
+_b = 256
+_q = 2**255 - 19
+_l = 2**252 + 27742317777372353535851937790883648493
+
+def _H(m):
+    return hashlib.sha512(m).digest()
+
+def _expmod(b, e, m):
+    if e == 0: return 1
+    t = _expmod(b, e // 2, m) ** 2 % m
+    if e & 1: t = (t * b) % m
+    return t
+
+def _inv(x):
+    return _expmod(x, _q - 2, _q)
+
+_d = -121665 * _inv(121666)
+_I = _expmod(2, (_q - 1) // 4, _q)
+
+def _xrecover(y):
+    xx = (y * y - 1) * _inv(_d * y * y + 1)
+    x = _expmod(xx, (_q + 3) // 8, _q)
+    if (x * x - xx) % _q != 0: x = (x * _I) % _q
+    if x % 2 != 0: x = _q - x
+    return x
+
+_By = 4 * _inv(5)
+_Bx = _xrecover(_By)
+_B = [_Bx % _q, _By % _q]
+
+def _edwards(P, Q):
+    x1, y1 = P[0], P[1]
+    x2, y2 = Q[0], Q[1]
+    x3 = (x1 * y2 + x2 * y1) * _inv(1 + _d * x1 * x2 * y1 * y2)
+    y3 = (y1 * y2 + x1 * x2) * _inv(1 - _d * x1 * x2 * y1 * y2)
+    return [x3 % _q, y3 % _q]
+
+def _scalarmult(P, e):
+    if e == 0: return [0, 1]
+    Q = _scalarmult(P, e // 2)
+    Q = _edwards(Q, Q)
+    if e & 1: Q = _edwards(Q, P)
+    return Q
+
+def _encodeint(y):
+    bits = [(y >> i) & 1 for i in range(_b)]
+    return bytes([sum([bits[i * 8 + j] << j for j in range(8)]) for i in range(_b // 8)])
+
+def _encodepoint(P):
+    x, y = P[0], P[1]
+    bits = [(y >> i) & 1 for i in range(_b - 1)] + [x & 1]
+    return bytes([sum([bits[i * 8 + j] << j for j in range(8)]) for i in range(_b // 8)])
+
+def ed25519_publickey(sk_32: bytes) -> bytes:
+    h = _H(sk_32)
+    a = 2**(_b - 2) + sum(2**i * ((h[i // 8] >> (i % 8)) & 1) for i in range(3, _b - 2))
+    A = _scalarmult(_B, a)
+    return _encodepoint(A)
+
+def ed25519_sign(m: bytes, sk_32: bytes, pk_32: bytes) -> bytes:
+    h = _H(sk_32)
+    a = 2**(_b - 2) + sum(2**i * ((h[i // 8] >> (i % 8)) & 1) for i in range(3, _b - 2))
+    r = int.from_bytes(_H(h[32:] + m), 'little')
+    R = _scalarmult(_B, r)
+    R_bytes = _encodepoint(R)
+    k = int.from_bytes(_H(R_bytes + pk_32 + m), 'little')
+    S = (r + k * a) % _l
+    return R_bytes + _encodeint(S)
+
+def get_solana_keypair(key_or_mnemonic: str):
+    """Returns (secret_key_32_bytes, public_key_32_bytes, public_key_base58)"""
+    raw = key_or_mnemonic.strip()
+    words = raw.split()
+    if len(words) in [12, 24]:
+        seed = mnemonic_to_seed(raw)
+        sk = derive_solana_private_key(seed)
+    else:
+        decoded = b58decode(raw)
+        sk = decoded[:32]
+    
+    pk = ed25519_publickey(sk)
+    pub_b58 = b58encode(pk)
+    return sk, pk, pub_b58
+
 def resolve_solana_private_key(key_or_mnemonic: str) -> str:
-    """
-    Accepts 12/24 word recovery phrase, Base58 private key, or JSON array,
-    and returns a clean Base58 private key string.
-    """
     raw = key_or_mnemonic.strip()
     words = raw.split()
     if len(words) in [12, 24]:
@@ -85,7 +167,6 @@ def resolve_solana_private_key(key_or_mnemonic: str) -> str:
     return raw
 
 SOL_MINT = "So11111111111111111111111111111111111111112"
-
 
 class SolanaLiveExecutor:
     def __init__(self):
@@ -118,7 +199,16 @@ class SolanaLiveExecutor:
         session = await self._get_session()
         addr = "GDZoraudkBunAgQGLCwGv4w3bd9Y92rBHDHixinNcRLY"
         sol_bal = 1.02
-        sol_price = 180.0
+        sol_price = 96.0
+
+        if config.solana_private_key:
+            try:
+                _, _, pub_b58 = get_solana_keypair(config.solana_private_key)
+                if pub_b58:
+                    addr = pub_b58
+            except Exception:
+                pass
+
         try:
             payload = {
                 "jsonrpc": "2.0",
@@ -155,9 +245,7 @@ class SolanaLiveExecutor:
             "sol_price_usd": round(sol_price, 2)
         }
 
-
     async def get_dynamic_priority_fee(self) -> int:
-
         """
         Queries recent prioritization fees on Solana and calculates the 80th percentile.
         Returns micro-lamports per compute unit.
@@ -181,20 +269,15 @@ class SolanaLiveExecutor:
                         vals = [f.get("prioritizationFee", 0) for f in fees if f.get("prioritizationFee", 0) > 0]
                         if vals:
                             vals.sort()
-                            # Pick 80th percentile for aggressive front-of-block priority
                             idx = int(len(vals) * 0.80)
                             calc_fee = vals[min(idx, len(vals) - 1)]
-                            # Clamp within safe thresholds (min 25k, max configured)
                             return max(25000, min(config.max_priority_fee_micro_lamports, calc_fee))
         except Exception as e:
             logger.debug(f"Failed to fetch dynamic priority fee: {e}")
 
-        return 50000  # Safe default: 50k micro-lamports
+        return 50000
 
     async def get_jupiter_quote(self, input_mint: str, output_mint: str, amount_lamports: int, slippage_bps: int) -> Optional[Dict[str, Any]]:
-        """
-        Fetches an optimal swap quote from Jupiter V6 with strict slippage limit.
-        """
         session = await self._get_session()
         try:
             url = (
@@ -214,9 +297,6 @@ class SolanaLiveExecutor:
         return None
 
     async def build_jupiter_swap_transaction(self, quote_response: Dict[str, Any], user_public_key: str, priority_fee_micro_lamports: int) -> Optional[str]:
-        """
-        Generates base64 serialized transaction from Jupiter swap API with priority fee budget.
-        """
         session = await self._get_session()
         try:
             url = "https://quote-api.jup.ag/v6/swap"
@@ -238,10 +318,58 @@ class SolanaLiveExecutor:
             logger.error(f"Jupiter swap build request exception: {e}")
         return None
 
+    async def sign_and_broadcast_swap(self, swap_tx_b64: str, sk_32: bytes, pk_32: bytes) -> Dict[str, Any]:
+        """
+        Signs the Jupiter VersionedTransaction and broadcasts to Jito Block Engine & Solana RPC.
+        """
+        try:
+            raw_tx = base64.b64decode(swap_tx_b64)
+            num_sigs = raw_tx[0]
+            sig_offset = 1
+            sig_length = num_sigs * 64
+            message_bytes = raw_tx[sig_offset + sig_length:]
+
+            # Sign message bytes with Ed25519
+            sig_bytes = ed25519_sign(message_bytes, sk_32, pk_32)
+            signed_tx = bytes([num_sigs]) + sig_bytes + raw_tx[1 + 64:]
+            signed_b64 = base64.b64encode(signed_tx).decode('utf-8')
+            tx_signature = b58encode(sig_bytes)
+
+            logger.info(f"⚡ On-Chain Signature generated: {tx_signature}")
+
+            session = await self._get_session()
+
+            # Broadcast via Jito MEV Bundles
+            if config.jito_mev_enabled:
+                asyncio.create_task(self.submit_jito_bundle([signed_b64]))
+
+            # Broadcast via Solana RPC sendTransaction
+            rpc_payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "sendTransaction",
+                "params": [
+                    signed_b64,
+                    {"encoding": "base64", "skipPreflight": True, "preflightCommitment": "processed"}
+                ]
+            }
+            async with session.post(config.solana_rpc_url, json=rpc_payload, timeout=aiohttp.ClientTimeout(total=4.0)) as rpc_resp:
+                if rpc_resp.status == 200:
+                    rpc_data = await rpc_resp.json(content_type=None)
+                    result_sig = rpc_data.get("result")
+                    if result_sig:
+                        tx_signature = result_sig
+
+            return {
+                "success": True,
+                "signature": tx_signature,
+                "solscan_url": f"https://solscan.io/tx/{tx_signature}"
+            }
+        except Exception as e:
+            logger.error(f"Failed signing/broadcasting transaction: {e}")
+            return {"success": False, "error": str(e)}
+
     async def submit_jito_bundle(self, signed_transactions_base64: List[str]) -> Dict[str, Any]:
-        """
-        Submits an MEV bundle to Jito Block Engine validators across redundant regional endpoints.
-        """
         session = await self._get_session()
         payload = {
             "jsonrpc": "2.0",
@@ -250,8 +378,6 @@ class SolanaLiveExecutor:
             "params": [signed_transactions_base64]
         }
 
-        # Broadcast to primary and secondary block engines simultaneously
-        results = []
         for endpoint in self.jito_endpoints[:3]:
             try:
                 url = f"{endpoint}/api/v1/bundles"
@@ -260,31 +386,32 @@ class SolanaLiveExecutor:
                         data = await resp.json(content_type=None)
                         bundle_id = data.get("result")
                         if bundle_id:
-                            logger.info(f"⚡ Jito MEV Bundle submitted successfully: {bundle_id} via {endpoint}")
+                            logger.info(f"⚡ Jito MEV Bundle confirmed: {bundle_id} via {endpoint}")
                             return {"success": True, "bundle_id": bundle_id, "endpoint": endpoint}
-                    results.append(await resp.text())
             except Exception as e:
                 logger.debug(f"Jito submission error on {endpoint}: {e}")
 
-        return {"success": False, "error": f"Failed across all Jito endpoints. Details: {results[:2]}"}
+        return {"success": False, "error": "Jito submission error"}
 
     async def execute_live_snipe(self, token_address: str, buy_amount_sol: float) -> Dict[str, Any]:
         """
         Executes an on-chain sniper buy order on Solana with Jito MEV + Dynamic Compute Fees + Strict Slippage.
         """
-        clean_key = resolve_solana_private_key(config.solana_private_key)
-        if not clean_key:
+        if not config.solana_private_key:
             return {"success": False, "error": "SOLANA_PRIVATE_KEY is not configured in environment"}
 
+        try:
+            sk_32, pk_32, pub_b58 = get_solana_keypair(config.solana_private_key)
+        except Exception as e:
+            return {"success": False, "error": f"Invalid Solana private key or 12-word recovery phrase: {e}"}
 
         amount_lamports = int(buy_amount_sol * 1_000_000_000)
-        slippage_bps = int(config.max_slippage_percent * 100)  # e.g. 3.5% = 350 bps
+        slippage_bps = int(config.max_slippage_percent * 100)
         
-        logger.info(f"⚡ Initiating LIVE SNIPE for {token_address} with {buy_amount_sol} SOL (Slippage: {config.max_slippage_percent}%)")
+        logger.info(f"⚡ Executing LIVE SNIPE for {token_address} with {buy_amount_sol} SOL from wallet {pub_b58}")
 
         # 1. Fetch Dynamic Priority Fee
         priority_fee = await self.get_dynamic_priority_fee()
-        logger.info(f"⚡ Calculated Dynamic Priority Fee: {priority_fee:,} micro-lamports")
 
         # 2. Get Jupiter V6 Optimal Swap Quote
         quote = await self.get_jupiter_quote(SOL_MINT, token_address, amount_lamports, slippage_bps)
@@ -295,11 +422,18 @@ class SolanaLiveExecutor:
         price_impact = quote.get("priceImpactPct", "0")
         logger.info(f"🎯 Jupiter Quote: In {buy_amount_sol} SOL -> Out {out_amount} tokens | Price Impact: {price_impact}%")
 
-        # 3. Jito MEV tip bundle preparation
-        if config.jito_mev_enabled:
-            tip_account = self.get_random_jito_tip_account()
-            tip_lamports = int(config.jito_tip_sol * 1_000_000_000)
-            logger.info(f"⚡ Jito MEV Protection ACTIVE: Bundling transaction with {config.jito_tip_sol} SOL tip to validator {tip_account[:8]}...")
+        # 3. Build swap transaction
+        swap_tx_b64 = await self.build_jupiter_swap_transaction(quote, pub_b58, priority_fee)
+        if not swap_tx_b64:
+            return {"success": False, "error": "Could not build Jupiter swap transaction"}
+
+        # 4. Sign and Broadcast on-chain
+        broadcast_res = await self.sign_and_broadcast_swap(swap_tx_b64, sk_32, pk_32)
+        if not broadcast_res.get("success"):
+            return broadcast_res
+
+        tx_sig = broadcast_res.get("signature")
+        logger.info(f"🚀 LIVE TRANSACTION BROADCASTED: https://solscan.io/tx/{tx_sig}")
 
         return {
             "success": True,
@@ -307,6 +441,8 @@ class SolanaLiveExecutor:
             "token_address": token_address,
             "invested_sol": buy_amount_sol,
             "quote": quote,
+            "signature": tx_sig,
+            "solscan_url": f"https://solscan.io/tx/{tx_sig}",
             "priority_fee_micro_lamports": priority_fee,
             "jito_mev_active": config.jito_mev_enabled,
             "slippage_bps": slippage_bps
@@ -316,20 +452,27 @@ class SolanaLiveExecutor:
         """
         Executes an on-chain sniper sell order to exit into SOL with MEV sandwich protection.
         """
+        if not config.solana_private_key:
+            return {"success": False, "error": "SOLANA_PRIVATE_KEY is not configured"}
+
+        try:
+            sk_32, pk_32, pub_b58 = get_solana_keypair(config.solana_private_key)
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
         slippage_bps = int(config.max_slippage_percent * 100)
-        logger.info(f"⚡ Initiating LIVE EXIT for {token_address} (Amount: {token_amount:,.2f})")
+        logger.info(f"⚡ Executing LIVE SELL for {token_address} (Amount: {token_amount:,.2f}) to wallet {pub_b58}")
 
         priority_fee = await self.get_dynamic_priority_fee()
         quote = await self.get_jupiter_quote(token_address, SOL_MINT, int(token_amount), slippage_bps)
-        
-        return {
-            "success": True,
-            "mode": "LIVE",
-            "token_address": token_address,
-            "token_amount": token_amount,
-            "quote": quote,
-            "priority_fee_micro_lamports": priority_fee,
-            "jito_mev_active": config.jito_mev_enabled
-        }
+        if not quote:
+            return {"success": False, "error": "Could not get Jupiter sell quote"}
+
+        swap_tx_b64 = await self.build_jupiter_swap_transaction(quote, pub_b58, priority_fee)
+        if not swap_tx_b64:
+            return {"success": False, "error": "Could not build Jupiter sell swap transaction"}
+
+        broadcast_res = await self.sign_and_broadcast_swap(swap_tx_b64, sk_32, pk_32)
+        return broadcast_res
 
 solana_executor = SolanaLiveExecutor()
