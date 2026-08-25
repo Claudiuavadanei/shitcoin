@@ -209,79 +209,88 @@ class MarketScanner:
         session = await self._get_session()
         discovered: List[Dict[str, Any]] = []
 
-        # Feed 1: High-Speed New Pools Feed
+        # Feed 1: Top Liquid & Trending Raydium/DEX Pools Feed (Solana)
         active_chains = ["solana"] if config.trading_mode == "LIVE" else config.enabled_chains
         for chain in active_chains:
-
             network = "solana" if chain == "solana" else ("bsc" if chain == "bsc" else "base")
-            try:
-                url_gecko = f"https://api.geckoterminal.com/api/v2/networks/{network}/new_pools"
-                async with session.get(url_gecko, timeout=aiohttp.ClientTimeout(total=3.5)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json(content_type=None)
-                        pools = data.get("data", [])
-                        for pool in pools[:12]:
-                            attr = pool.get("attributes", {})
-                            base_token_id = pool.get("relationships", {}).get("base_token", {}).get("data", {}).get("id", "")
-                            token_addr = base_token_id.split("_")[-1] if "_" in base_token_id else ""
-                            if not token_addr or token_addr in self.seen_tokens:
-                                continue
-                            
-                            pair_addr = attr.get("address", "")
-                            name_raw = attr.get("name", "Token / SOL")
-                            symbol = name_raw.split(" / ")[0] if " / " in name_raw else name_raw
-                            price_usd = float(attr.get("base_token_price_usd", 0) or 0)
-                            liquidity_usd = float(attr.get("reserve_in_usd", 0) or 0)
-                            vol_dict = attr.get("volume_usd", {})
-                            volume_24h = float(vol_dict.get("h24", vol_dict.get("h1", 0)) or 0)
-                            dex_id = pool.get("relationships", {}).get("dex", {}).get("data", {}).get("id", "dex")
-                            
-                            txns = attr.get("transactions", {}).get("h1", {})
-                            buys = int(txns.get("buys", 0) or 0)
-                            sells = int(txns.get("sells", 0) or 0)
-                            
-                            pool_info = {
-                                "token_address": token_addr,
-                                "name": symbol,
-                                "symbol": symbol,
-                                "chain": chain,
-                                "dex_id": dex_id,
-                                "pair_address": pair_addr,
-                                "price_usd": price_usd,
-                                "price_native": float(attr.get("base_token_price_native_currency", 0) or 0),
-                                "liquidity_usd": liquidity_usd,
-                                "volume_24h": volume_24h,
-                                "fdv": float(attr.get("fdv_usd", 0) or 0),
-                                "price_change_5m": float(attr.get("price_change_percentage", {}).get("m5", 0) or 0),
-                                "price_change_1h": float(attr.get("price_change_percentage", {}).get("h1", 0) or 0),
-                                "price_change_24h": float(attr.get("price_change_percentage", {}).get("h24", 0) or 0),
-                                "created_at_ms": int(time.time() * 1000),
-                                "discovered_at": time.time(),
-                                "url": f"https://dexscreener.com/{chain}/{pair_addr}" if pair_addr else f"https://dexscreener.com/{chain}/{token_addr}",
-                                "pair_data": {
-                                    "chainId": chain,
-                                    "dexId": dex_id,
-                                    "pairAddress": pair_addr,
-                                    "baseToken": {"address": token_addr, "name": symbol, "symbol": symbol},
-                                    "priceUsd": str(price_usd),
-                                    "txns": {"h1": {"buys": buys, "sells": sells}, "m5": {"buys": buys, "sells": sells}},
-                                    "volume": {"h24": volume_24h, "h1": volume_24h},
-                                    "liquidity": {"usd": liquidity_usd}
+            endpoints = [
+                f"https://api.geckoterminal.com/api/v2/networks/{network}/trending_pools",
+                f"https://api.geckoterminal.com/api/v2/networks/{network}/pools",
+                f"https://api.geckoterminal.com/api/v2/networks/{network}/new_pools"
+            ]
+            for ep in endpoints:
+                try:
+                    async with session.get(ep, timeout=aiohttp.ClientTimeout(total=3.5)) as resp:
+                        if resp.status == 200:
+                            data = await resp.json(content_type=None)
+                            pools = data.get("data", [])
+                            for pool in pools[:10]:
+                                attr = pool.get("attributes", {})
+                                base_token_id = pool.get("relationships", {}).get("base_token", {}).get("data", {}).get("id", "")
+                                token_addr = base_token_id.split("_")[-1] if "_" in base_token_id else ""
+                                if not token_addr or token_addr in self.seen_tokens:
+                                    continue
+                                
+                                liquidity_usd = float(attr.get("reserve_in_usd", 0) or 0)
+                                vol_dict = attr.get("volume_usd", {})
+                                volume_24h = float(vol_dict.get("h24", vol_dict.get("h1", 0)) or 0)
+                                
+                                # Strict Quality Filter: Only Established Pools ($40k+ Liq & $15k+ Volume)
+                                if liquidity_usd < config.min_liquidity_usd or volume_24h < (config.min_volume_usd * 0.5):
+                                    continue
+
+                                pair_addr = attr.get("address", "")
+                                name_raw = attr.get("name", "Token / SOL")
+                                symbol = name_raw.split(" / ")[0] if " / " in name_raw else name_raw
+                                price_usd = float(attr.get("base_token_price_usd", 0) or 0)
+                                dex_id = pool.get("relationships", {}).get("dex", {}).get("data", {}).get("id", "raydium")
+                                
+                                txns = attr.get("transactions", {}).get("h1", {})
+                                buys = int(txns.get("buys", 0) or 0)
+                                sells = int(txns.get("sells", 0) or 0)
+                                
+                                pool_info = {
+                                    "token_address": token_addr,
+                                    "name": symbol,
+                                    "symbol": symbol,
+                                    "chain": chain,
+                                    "dex_id": dex_id,
+                                    "pair_address": pair_addr,
+                                    "price_usd": price_usd,
+                                    "price_native": float(attr.get("base_token_price_native_currency", 0) or 0),
+                                    "liquidity_usd": liquidity_usd,
+                                    "volume_24h": volume_24h,
+                                    "fdv": float(attr.get("fdv_usd", 0) or 0),
+                                    "price_change_5m": float(attr.get("price_change_percentage", {}).get("m5", 0) or 0),
+                                    "price_change_1h": float(attr.get("price_change_percentage", {}).get("h1", 0) or 0),
+                                    "price_change_24h": float(attr.get("price_change_percentage", {}).get("h24", 0) or 0),
+                                    "created_at_ms": int(time.time() * 1000) - (3600 * 1000),  # Established token
+                                    "discovered_at": time.time(),
+                                    "url": f"https://dexscreener.com/{chain}/{pair_addr}" if pair_addr else f"https://dexscreener.com/{chain}/{token_addr}",
+                                    "pair_data": {
+                                        "chainId": chain,
+                                        "dexId": dex_id,
+                                        "pairAddress": pair_addr,
+                                        "baseToken": {"address": token_addr, "name": symbol, "symbol": symbol},
+                                        "priceUsd": str(price_usd),
+                                        "txns": {"h1": {"buys": buys, "sells": sells}, "m5": {"buys": buys, "sells": sells}},
+                                        "volume": {"h24": volume_24h, "h1": volume_24h},
+                                        "liquidity": {"usd": liquidity_usd}
+                                    }
                                 }
-                            }
-                            discovered.append(pool_info)
-            except Exception as e:
-                logger.debug(f"GeckoTerminal pools error for {chain}: {e}")
+                                discovered.append(pool_info)
+                except Exception as e:
+                    logger.debug(f"GeckoTerminal endpoint error for {ep}: {e}")
 
         # Feed 2: DexScreener Profiles Fallback
-        if len(discovered) < 5:
+        if len(discovered) < 3:
             try:
                 url_profiles = "https://api.dexscreener.com/token-profiles/latest/v1"
                 async with session.get(url_profiles, timeout=aiohttp.ClientTimeout(total=3.0)) as resp:
                     if resp.status == 200:
                         data = await resp.json(content_type=None)
                         if isinstance(data, list):
-                            addrs = [item.get("tokenAddress") for item in data[:8] if item.get("tokenAddress") and item.get("tokenAddress") not in self.seen_tokens]
+                            addrs = [item.get("tokenAddress") for item in data[:6] if item.get("tokenAddress") and item.get("tokenAddress") not in self.seen_tokens]
                             if addrs:
                                 tasks = [self.fetch_token_details("", a) for a in addrs]
                                 res_list = await asyncio.gather(*tasks, return_exceptions=True)
@@ -289,7 +298,8 @@ class MarketScanner:
                                     if isinstance(res, dict) and res:
                                         if config.trading_mode == "LIVE" and res.get("chain") != "solana":
                                             continue
-                                        discovered.append(res)
+                                        if res.get("liquidity_usd", 0) >= config.min_liquidity_usd:
+                                            discovered.append(res)
 
             except Exception as e:
                 logger.debug(f"DexScreener profiles fallback error: {e}")
